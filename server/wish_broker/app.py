@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from . import clients, config, grant
+from .lines import genie_key, line
 from .schemas import AskRequest, AskResponse, ClientCard, GameConfig, GrantRequest, GrantResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
@@ -30,7 +31,9 @@ def _client(client_id: str):
 @api.get("/config", response_model=GameConfig)
 def get_config():
     return GameConfig(win_karma=config.WIN_KARMA, start_karma=config.START_KARMA,
-                      questions_per_call=config.QUESTIONS_PER_CALL, wish_seconds=config.WISH_SECONDS,
+                      questions_per_call=config.QUESTIONS_PER_CALL, wish_seconds=config.WISH_SECONDS, timeout_penalty=config.TIMEOUT_PENALTY,
+                      genie_refused=line(config.REFUSAL_LINE, genie_key("refused")),
+                      genie_rubs=[line(t, genie_key(f"rub_{i}")) for i, t in enumerate(config.RUB_LINES, 1)],
                       llm_fake=config.LLM_FAKE, voice_fake=config.VOICE_FAKE)
 
 

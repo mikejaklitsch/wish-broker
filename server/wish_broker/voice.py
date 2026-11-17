@@ -198,3 +198,28 @@ def music(name: str, prompt: str, seconds: int) -> Path | None:
 
     return _guarded(SFX_DIR / f"{name}-{_key(MUSIC_MODEL, prompt, seconds)}.mp3",
                     f"music/{name}", MUSIC_ESTIMATE, make)
+
+
+def speak_live(text: str, voice_id: str, model: str, purpose: str) -> bytes | None:
+    """MP3 bytes for a line generated on the spot (the genie's outcome), or None when voice is off, in dry run,
+    when the account can't cover it, or when anything goes wrong.
+    No cache or ledger: the hosted server can't keep files, so the account's own balance is the guard."""
+    if config.VOICE_FAKE or not config.GENIE_VOICE or not voice_id:
+        return None
+    estimate = credits_for(len(text), model)
+    if config.VOICE_DRY:
+        log.info("elevenlabs dry %s: would spend about %.0f credits", purpose, estimate)
+        return None
+    try:
+        sub = _elevenlabs().user.subscription.get()
+        left = sub.character_limit - sub.character_count
+        if left < estimate:
+            log.warning("elevenlabs %s skipped: %d credits left, %.0f needed", purpose, left, estimate)
+            return None
+        audio = b"".join(_elevenlabs().text_to_speech.convert(
+            voice_id, text=text, model_id=model, output_format="mp3_44100_128"))
+        log.info("elevenlabs %s about %.0f credits, %d left before", purpose, estimate, left)
+        return audio
+    except Exception as e:      # a voice failure must never break the wish
+        log.warning("elevenlabs %s failed: %s", purpose, e)
+        return None

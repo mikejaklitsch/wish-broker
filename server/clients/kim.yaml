@@ -15,8 +15,8 @@ goodbye_line: "Okay, I have to get back to work. I've got a patient sitting ther
 facts:
   - id: goal
     kind: goal
-    label: Why tonight?
-    value: A real date with Theo. Tonight's six o'clock class is his last one at her studio; after that she has no reason to see him.
+    label: When by?
+    value: Tonight. His six o'clock class is his last one at her studio, and after that she has no reason to see him. She wants a real date with Theo before then.
   - id: theo
     kind: detail
     label: Who is he?
@@ -41,7 +41,7 @@ facts:
 # Questions with `requires` only appear once those facts are on the notepad.
 questions:
   - id: tonight
-    text: Why does it have to be tonight?
+    text: When does this have to happen by?
     reveals: goal
     answer: "Tonight's his last class at my studio. He's moving to some studio across town with, like, a juice bar. After tonight I have zero excuses to see him. So it's tonight or never."
   - id: him

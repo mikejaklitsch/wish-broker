@@ -3,7 +3,7 @@
 export interface Api {
   GameConfig?: GameConfig;
   ClientCard?: ClientCard;
-  Line?: Line;
+  Line?: Line1;
   FactLabel?: FactLabel;
   QuestionLabel?: QuestionLabel;
   AskRequest?: AskRequest;
@@ -25,8 +25,39 @@ export interface GameConfig {
   start_karma: number;
   questions_per_call: number;
   wish_seconds: number;
+  timeout_penalty: number;
+  genie_refused: Line;
+  /**
+   * The genie's lines when the lamp is rubbed; one is played at random
+   */
+  genie_rubs: Line1[];
   llm_fake: boolean;
   voice_fake: boolean;
+}
+/**
+ * Something said out loud: the text, its recording if generated, and how long it takes.
+ */
+export interface Line {
+  text: string;
+  /**
+   * URL of the recording, or null when not generated yet
+   */
+  audio: string | null;
+  seconds: number;
+}
+/**
+ * Something said out loud: the text, its recording if generated, and how long it takes.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "Line".
+ */
+export interface Line1 {
+  text: string;
+  /**
+   * URL of the recording, or null when not generated yet
+   */
+  audio: string | null;
+  seconds: number;
 }
 /**
  * What the browser may see about a client before the call: name, job and pay only. Everything else comes from the call.
@@ -41,24 +72,10 @@ export interface ClientCard {
   tier: "$" | "$$" | "$$$";
   pay_min: number;
   pay_max: number;
-  opening: Line;
-  goodbye: Line;
+  opening: Line1;
+  goodbye: Line1;
   facts: FactLabel[];
   questions: QuestionLabel[];
-}
-/**
- * Something said out loud: the text, its recording if generated, and how long it takes.
- *
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "Line".
- */
-export interface Line {
-  text: string;
-  /**
-   * URL of the recording, or null when not generated yet
-   */
-  audio: string | null;
-  seconds: number;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -94,7 +111,7 @@ export interface AskRequest {
  * via the `definition` "AskResponse".
  */
 export interface AskResponse {
-  answer: Line;
+  answer: Line1;
   revealed: RevealedFact[];
 }
 /**
@@ -112,6 +129,10 @@ export interface RevealedFact {
 export interface GrantRequest {
   client_id: string;
   wish: string;
+  /**
+   * The genie's stock phrases from earlier outcomes this session, so he doesn't repeat himself
+   */
+  used_phrases?: string[];
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -119,16 +140,20 @@ export interface GrantRequest {
  */
 export interface GrantResult {
   refused: boolean;
-  genie: Line1;
+  genie: Line2;
   scorecard: Scorecard | null;
   stars: number;
   bill: Bill;
-  review: Line2;
+  review: Line3;
+  /**
+   * The genie's stock phrases in this outcome; send them back as used_phrases
+   */
+  phrases?: string[];
 }
 /**
  * Something said out loud: the text, its recording if generated, and how long it takes.
  */
-export interface Line1 {
+export interface Line2 {
   text: string;
   /**
    * URL of the recording, or null when not generated yet
@@ -163,7 +188,7 @@ export interface Bill {
 /**
  * Something said out loud: the text, its recording if generated, and how long it takes.
  */
-export interface Line2 {
+export interface Line3 {
   text: string;
   /**
    * URL of the recording, or null when not generated yet

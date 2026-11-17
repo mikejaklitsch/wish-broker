@@ -44,10 +44,27 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(4, 3, 2, .62); backdrop-filter: blur(2px); }
 .overlay.thinking { background: rgba(4, 3, 2, .12); backdrop-filter: none; place-items: end center; padding-bottom: 14vh; }
 .overlay.thinking .genie { text-shadow: 0 2px 12px rgba(0, 0, 0, .9); }
+.intro { text-align: center; line-height: 1.55; font-size: 17px; }
+.intro h1 { font-size: 40px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); margin: 0 0 18px; }
+.intro p { margin: 0 0 14px; }
+.intro .primary { margin-top: 10px; padding: 10px 34px; }
 .overlay-body { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
 .overlay-body.wide { width: min(1040px, 100%); }
 .split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 760px) { .split { grid-template-columns: minmax(0, 1fr); } }
+/* Wish screen: the genie, the contract and the case notes side by side. His black background fades into the room. */
+.overlay-body.wide:has(.wish-split) { width: min(1360px, 100%); }
+.wish-split { grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; }
+.genie-portrait { width: 100%; height: auto; display: block;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent), linear-gradient(to bottom, transparent, #000 6%, #000 94%, transparent);
+  mask-composite: intersect; }
+.overlay-body.wide:has(.genie-split) { width: min(980px, 100%); }
+.genie-split { grid-template-columns: minmax(0, .8fr) minmax(0, 1.4fr); align-items: center; }
+@media (max-width: 760px) { .genie-split { grid-template-columns: minmax(0, 1fr); } .genie-split .genie-portrait { display: none; } }
+@media (max-width: 1000px) { .wish-split { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } .genie-portrait { display: none; } }
+@media (max-width: 760px) { .wish-split { grid-template-columns: minmax(0, 1fr); } }
 
 .type { font-family: var(--type); }
 .hand { font-family: var(--hand); }
@@ -75,7 +92,7 @@ h2, h3 { font-weight: 400; margin: 0 0 10px; }
 .ic-teaser { grid-column: 1 / -1; font: 24px var(--hand); line-height: 1.15; margin-top: 4px; }
 
 /* ---- legal pad ---- */
-.pad { background: repeating-linear-gradient(transparent 0 31px, var(--pad-line) 31px 32px), var(--pad); color: #1f2a44; padding: 18px 18px 22px 48px; border-radius: 2px; box-shadow: 0 8px 22px rgba(0, 0, 0, .55); position: relative; min-height: 260px; line-height: 32px; }
+.pad { background: repeating-linear-gradient(transparent 0 25px, var(--pad-line) 25px 26px, transparent 26px 32px), var(--pad); background-origin: content-box; background-clip: border-box; color: #1f2a44; padding: 18px 18px 22px 48px; border-radius: 2px; box-shadow: 0 8px 22px rgba(0, 0, 0, .55); position: relative; min-height: 260px; line-height: 32px; }
 .pad::before { content: ""; position: absolute; top: 0; bottom: 0; left: 36px; width: 2px; background: #d98a8a; }
 .pad p { margin: 0; font-size: 24px; }
 .pad-title { font-weight: 700; }
@@ -118,6 +135,7 @@ h2, h3 { font-weight: 400; margin: 0 0 10px; }
 
 /* ---- contract ---- */
 .contract { background: var(--paper); color: var(--ink); padding: 22px 24px; border-radius: 2px; box-shadow: 0 10px 28px rgba(0, 0, 0, .6); }
+.contract.centered { text-align: center; }
 .contract h2 { text-align: center; letter-spacing: .08em; text-transform: uppercase; font-size: 20px; }
 .contract textarea { width: 100%; resize: vertical; font-size: 18px; line-height: 1.5; background: #fffaf0; color: var(--ink); border: 1px solid #c8b896; padding: 10px; margin-top: 8px; }
 .meter { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; opacity: .8; }

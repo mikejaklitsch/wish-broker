@@ -1,4 +1,4 @@
-"""Record every scripted line: client openings, answers, goodbyes and refused reviews, plus the genie's refusal.
+"""Record every scripted line: client openings, answers, goodbyes and refused reviews, plus the genie's refusal and lamp-rub lines.
 
   python scripts/generate_audio.py           dry run: list what would be recorded and the credits, send nothing
   python scripts/generate_audio.py --real    record for real (lines already recorded cost nothing)
@@ -28,6 +28,9 @@ def scripted():
         yield client_key(c.id, "goodbye"), c.goodbye_line, c.voice_id
         yield client_key(c.id, "refused_review"), c.refused_review, c.voice_id
     yield genie_key("refused"), config.REFUSAL_LINE, config.GENIE_VOICE_ID
+    yield genie_key("nice_wish"), config.GENIE_FALLBACK_LINE, config.GENIE_VOICE_ID
+    for i, text in enumerate(config.RUB_LINES, 1):
+        yield genie_key(f"rub_{i}"), text, config.GENIE_VOICE_ID
 
 
 def main():

@@ -41,4 +41,4 @@ def _genie(ctx):
     }
 
 
-_FAKES = {"genie": _genie}
+_FAKES = {"genie": _genie, "genie_test": lambda ctx: {"line": "[sarcastic] How original."}}

@@ -89,6 +89,9 @@ class GameConfig(BaseModel):
     start_karma: int
     questions_per_call: int
     wish_seconds: int
+    timeout_penalty: int
+    genie_refused: Line = Field(description="The genie's refusal, also said when the wish clock runs out with nothing written")
+    genie_rubs: list[Line] = Field(description="The genie's lines when the lamp is rubbed; one is played at random")
     llm_fake: bool
     voice_fake: bool
 
@@ -113,6 +116,7 @@ class AskResponse(BaseModel):
 class GrantRequest(BaseModel):
     client_id: str
     wish: str
+    used_phrases: list[str] = Field(default_factory=list, description="The genie's stock phrases from earlier outcomes this session, so he doesn't repeat himself")
 
 
 class Scorecard(BaseModel):
@@ -133,6 +137,7 @@ class GrantResult(BaseModel):
     stars: int
     bill: Bill
     review: Line = Field(description="The client's review of the broker, in their voice, about what happened")
+    phrases: list[str] = Field(default_factory=list, description="The genie's stock phrases in this outcome; send them back as used_phrases")
 
 
 # ---------------------------------------------------------------- LLM output shapes
@@ -142,10 +147,15 @@ class GenieOutput(BaseModel):
     chosen_idea: str = Field(description="The idea you were told to grant, copied exactly")
     twisted_phrase: str = Field(description="The exact words of the wish the twist hangs on, or '' if granted as meant")
     outcome: str
+    phrases: list[str] = Field(default_factory=list, description="The stock parts of the outcome, word for word, 1 to 6 words each")
     goal_met: GoalMet
     feeling: Feeling
     note: str
     review: str
+
+
+class GenieTestOutput(BaseModel):
+    line: str = Field(description="The genie's reply to the wish, 1 to 5 words, optionally opening with one audio tag")
 
 
 # Models exported to the frontend.

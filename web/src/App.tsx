@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import Desk, { type Spot } from './Desk';
 import type { Lighting } from './lighting';
-import { CallPanel, Granting, Notepad, Overlay, ResultPanel, Roster, type Rating, ReviewPanel, WinPanel, WishPanel, type CallLine } from './panels';
+import { CallPanel, Granting, IntroPanel, Notepad, Overlay, ResultPanel, Roster, type Rating, ReviewPanel, WinPanel, WishPanel, type CallLine } from './panels';
 import { bell, getVolume, ring, say, setVolume, sfx, tick } from './sound';
 
 import type { ClientCard, GameConfig, GrantResult, Line } from './types.gen';
@@ -19,6 +19,7 @@ interface Job {
   ended: boolean;        // talk time ran out; no more calls
   hungUp: boolean;       // has hung up at least once, so the lamp can be rubbed
   draft: string;
+  greeted?: boolean;     // the genie has said his line for this client's wish
   deadline?: number;     // when the wish clock runs out (ms); set when the player starts the kitchen timer
   wish?: string;
   grant?: GrantResult;
@@ -30,17 +31,24 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
   // Nothing is saved: every page load is a fresh game.
   const [ratings, setRatings] = useState<Record<string, Rating>>({});     // each client's latest result
-  // Karma is the sum of each client's latest pay, so retrying a client replaces their earlier result.
-  const karmaWith = (r: Record<string, Rating>) => Object.values(r).reduce((sum, x) => sum + x.pay, cfg?.start_karma ?? 0);
+  // Karma is the sum of each client's latest pay, so retrying a client replaces their earlier result,
+  // minus what was lost letting the wish clock run out, which can take it below 0.
+  const [penalty, setPenalty] = useState(0);
+  const [notice, setNotice] = useState('');
+  const karmaWith = (r: Record<string, Rating>) => Object.values(r).reduce((sum, x) => sum + x.pay, cfg?.start_karma ?? 0) - penalty;
   const karma = karmaWith(ratings);
   const [job, setJob] = useState<Job | null>(null);
-  const [panel, setPanel] = useState<Panel>('none');
+  const [panel, setPanel] = useState<Panel>(() => new URLSearchParams(location.search).has('win') ? 'won' : 'none');
   const [error, setError] = useState('');
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [talking, setTalking] = useState(false);
+  // Add &win to the link to open straight on the win screen (for showing it off).
+  const showWin = new URLSearchParams(location.search).has('win');
+  const [intro, setIntro] = useState(!showWin);     // shown on every page load, before the bulb
   const [lit, setLit] = useState(false);      // the game starts when the player turns on the bulb; off again = only the bulb works
   const [caller, setCaller] = useState<ClientCard | null>(null);     // the client on the ringing phone
   const lighting = useRef<Lighting | null>(null);
+  const usedPhrases = useRef<string[]>([]);     // the genie's stock phrases this session, sent back so he doesn't repeat himself
   const stopRing = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -101,7 +109,8 @@ export default function App() {
     const l = lighting.current;
     l?.breathe(true);          // the room dims and swells while the genie thinks
     try {
-      const g = await api.grant({ client_id: job.client.id, wish });
+      const g = await api.grant({ client_id: job.client.id, wish, used_phrases: usedPhrases.current });
+      usedPhrases.current = [...usedPhrases.current, ...(g.phrases ?? [])];
       setJob(j => j && { ...j, grant: g });
       setPanel('result');
       void say(g.genie);
@@ -122,9 +131,17 @@ export default function App() {
   useEffect(() => clockRunning ? tick() : undefined, [clockRunning]);     // ticks until sealed or out of time
   const secondsLeft = job?.deadline ? Math.max(0, Math.ceil((job.deadline - now) / 1000)) : 0;
   useEffect(() => {
-    if (clockRunning && cfg && secondsLeft === 0) {
+    if (clockRunning && cfg && job && secondsLeft === 0) {
       bell();
-      void seal(draftRef.current.trim());
+      const wish = draftRef.current.trim();
+      if (wish) void seal(wish);
+      else {     // nothing written: the genie is put out, karma is lost, and the clock can be started again
+        void say(cfg.genie_refused);
+        setPenalty(p => p + cfg.timeout_penalty);
+        setJob({ ...job, deadline: undefined });
+        setPanel('none');
+        setNotice(`Time's up. You lost ${cfg.timeout_penalty} karma. Start the clock again when you're ready.`);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clockRunning, secondsLeft]);
@@ -141,7 +158,12 @@ export default function App() {
     setRatings(after); setJob(null);
     setPanel(karmaWith(after) >= cfg.win_karma ? 'won' : 'none');
   };
-  const restart = () => { setRatings({}); setJob(null); setPanel('none'); };
+  const restart = () => { setRatings({}); setPenalty(0); setJob(null); setPanel('none'); };
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   // ---------------------------------------------------------------- incoming calls
   // The player picks a client from the notepad; that client calls in a moment later.
@@ -181,7 +203,10 @@ export default function App() {
     }
     if (s === 'notepad') setPanel('notepad');
     if (s === 'timer' && canStartClock) startClock();
-    if (s === 'lamp' && canWish) setPanel('wish');
+    if (s === 'lamp' && canWish) {
+      if (!job.greeted && cfg) { void say(cfg.genie_rubs[Math.floor(Math.random() * cfg.genie_rubs.length)]); setJob({ ...job, greeted: true }); }
+      setPanel('wish');
+    }
   };
 
   return (
@@ -212,10 +237,12 @@ export default function App() {
           onSeal={w => void seal(w)} onClose={draft => { setJob({ ...job, draft }); setPanel('none'); }} />
       )}
       {panel === 'wish' && error && <div className="toast">{error}</div>}
+      {notice && <div className="toast">{notice}</div>}
       {panel === 'granting' && <Granting />}
       {panel === 'result' && job?.grant && job.wish && <ResultPanel client={job.client} wish={job.wish} grant={job.grant} onDone={showReview} />}
       {panel === 'review' && job?.grant && <ReviewPanel client={job.client} grant={job.grant} karmaBefore={karma} karmaAfter={karmaWith(after)} onDone={finishJob} />}
-      {panel === 'won' && <WinPanel karma={karma} onRestart={restart} />}
+      {intro && !loadError && <IntroPanel winKarma={cfg?.win_karma ?? 100} timeoutPenalty={cfg?.timeout_penalty ?? 10} onStart={() => setIntro(false)} />}
+      {panel === 'won' && <WinPanel karma={showWin && karma < (cfg?.win_karma ?? 100) ? cfg?.win_karma ?? 100 : karma} onRestart={restart} />}
     </main>
   );
 }

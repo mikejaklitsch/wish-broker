@@ -121,7 +121,8 @@ export function WishPanel({ client, revealed, cfg, initial, secondsLeft, onDraft
   const words = (wish.match(/\S+/g) ?? []).length;
   return (
     <Overlay wide onClose={() => onClose(wish)}>
-      <div className="split">
+      <div className="split wish-split">
+        <img className="genie-portrait" src="/scene/genie.jpg" alt="The genie, rising from his lamp" />
         <div className="contract">
           <h2 className="type">Wish contract</h2>
           <p className="type small">On behalf of {client.name}.</p>
@@ -144,17 +145,25 @@ export function WishPanel({ client, revealed, cfg, initial, secondsLeft, onDraft
 // ---------------------------------------------------------------- genie's answer
 export function ResultPanel({ client, wish, grant, onDone }: { client: ClientCard; wish: string; grant: GrantResult; onDone: () => void }) {
   return (
-    <Overlay>
-      <div className="contract">
-        <p className="type small muted">"{wish}"</p>
-        <p className="genie">{grant.genie.text}</p>
-        <button className="primary" onClick={onDone}>Read the review</button>
+    <Overlay wide>
+      <div className="split genie-split">
+        <img className="genie-portrait" src="/scene/genie.jpg" alt="The genie, rising from his lamp" />
+        <div className="contract centered">
+          <p className="type small muted">"{wish}"</p>
+          <p className="genie">{grant.genie.text}</p>
+          <button className="primary" onClick={onDone}>Read the review</button>
+        </div>
       </div>
     </Overlay>
   );
 }
 
 // ---------------------------------------------------------------- the review
+// The close button, by stars: the broker shrugging it off.
+const SHRUG: Record<number, string> = {
+  1: "They'll be back.", 2: "Can't win 'em all", 3: 'Close enough', 4: "I'll take it", 5: 'Another happy customer',
+};
+
 export function ReviewPanel({ client, grant, karmaBefore, karmaAfter, onDone }: {
   client: ClientCard; grant: GrantResult; karmaBefore: number; karmaAfter: number; onDone: () => void;
 }) {
@@ -179,7 +188,7 @@ export function ReviewPanel({ client, grant, karmaBefore, karmaAfter, onDone }: 
             <tr className="total"><td>Karma</td><td>{karmaBefore} → {karmaAfter}</td></tr>
           </tbody>
         </table>
-        <button className="primary" onClick={onDone}>Hang up</button>
+        <button className="primary" onClick={onDone}>{SHRUG[grant.stars]}</button>
       </div>
     </Overlay>
   );
@@ -193,10 +202,24 @@ export function Granting() {
 export function WinPanel({ karma, onRestart }: { karma: number; onRestart: () => void }) {
   return (
     <Overlay>
-      <div className="contract">
-        <h2 className="type">{karma} karma.</h2>
-        <p className="genie">Fine. The lamp owes you a wish of your own. Word it carefully.</p>
+      <div className="contract centered">
+        <h2 className="type">You earned {karma} Karma!</h2>
+        <p className="genie">Congratulations! You've earned a wish of your own, surely this won't go wrong...</p>
         <button className="primary" onClick={onRestart}>Start over</button>
+      </div>
+    </Overlay>
+  );
+}
+
+/** The first thing the player sees: who they are and how the job works. */
+export function IntroPanel({ winKarma, timeoutPenalty, onStart }: { winKarma: number; timeoutPenalty: number; onStart: () => void }) {
+  return (
+    <Overlay>
+      <div className="intro">
+        <h1>Wish Broker</h1>
+        <p>You're a professional wish maker. People call you when they have a wish to spend but no idea how to do it right. Your job is to find out what they really want and make sure the genie can't twist your words.</p>
+        <p>Happy clients leave good reviews and good reviews pay in karma. The genie isn't patient, so failing to make a wish in time will lose you {timeoutPenalty} karma. Collect {winKarma} karma to earn a wish of your own and win the game!</p>
+        <button className="primary" onClick={onStart}>Open for business</button>
       </div>
     </Overlay>
   );
