@@ -1,0 +1,70 @@
+# Draft client. Content to be approved.
+# Every question reveals one fact. The goal and cares decide how she takes the result; details are noise.
+# Words in [brackets] direct the voice delivery and are hidden on screen.
+id: kim
+name: Kim Alvarez
+age: 36
+profession: Dental hygienist
+tier: "$"
+persona: Warm, funny and a little awkward. Laughs at herself, overthinks everything, and says "okay" a lot when she's nervous.
+voice_description: A warm, bright American woman in her mid thirties, friendly and quick to laugh, a little self-conscious.
+voice_id: cgSgspJ2msm6clMCkdW9    # "Jessica - Playful, Bright, Warm", an ElevenLabs default voice
+opening_line: "Hi. Okay, this is kind of embarrassing. I'm Kim. I really want my yoga instructor to ask me out."
+goodbye_line: "Okay, I have to get back to work. I've got a patient sitting there with his mouth open. Thank you, really."
+
+facts:
+  - id: goal
+    kind: goal
+    label: Why tonight?
+    value: A real date with Theo. Tonight's six o'clock class is his last one at her studio; after that she has no reason to see him.
+  - id: theo
+    kind: detail
+    label: Who is he?
+    value: Theo. Calm voice, terrible jokes.
+  - id: months
+    kind: detail
+    label: How long?
+    value: Six months of classes, twice a week. Has only ever said "thanks" to him.
+  - id: for_real
+    kind: care
+    label: Why not ask him?
+    value: She wants him to actually want to. If he only asks to be nice, or because of magic, it doesn't count.
+  - id: private
+    kind: care
+    label: Where should he ask?
+    value: If he asked her in front of the class, she'd grab her mat and run out the door.
+  - id: teeth
+    kind: detail
+    label: Has he met her?
+    value: She cleaned his teeth once in March. He didn't recognize her.
+
+# Questions with `requires` only appear once those facts are on the notepad.
+questions:
+  - id: tonight
+    text: Why does it have to be tonight?
+    reveals: goal
+    answer: "Tonight's his last class at my studio. He's moving to some studio across town with, like, a juice bar. After tonight I have zero excuses to see him. So it's tonight or never."
+  - id: him
+    text: Tell me about him.
+    reveals: theo
+    answer: "His name's Theo. He has this super calm voice, and he tells the worst jokes. They're dad jokes, but worse. And I laugh at every single one, which is honestly a problem."
+  - id: how_long
+    text: How long have you liked him?
+    reveals: months
+    answer: "I've liked him for six months. I go twice a week, and in all that time I've said exactly one word to him, and it was 'thanks.' [laughs] I've said 'thanks' a lot."
+  - id: where
+    text: Where would you want him to ask you?
+    reveals: private
+    answer: "Oh, God, anywhere but class. If he asked me in front of everybody, I'd grab my mat and run straight out the door, and then I'd move to a different state."
+  - id: why_not
+    text: Why not just ask him yourself?
+    requires: [goal]
+    reveals: for_real
+    answer: "Because if he says yes just to be nice, I'll know. I'll see it on his face. I don't want him stuck with me. I want him to actually want to."
+  - id: met
+    text: Does he even know who you are?
+    requires: [theo]
+    reveals: teeth
+    answer: "It's a funny story. I cleaned his teeth back in March. He flosses, by the way, which is a green flag. He didn't recognize me at all. I think about it a lot."
+
+refused_review: "I finally worked up the nerve to ask for help, and the broker called back to say the genie wouldn't do it. So that was humiliating, and I still have three patients this afternoon."

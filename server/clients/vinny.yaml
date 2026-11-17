@@ -1,0 +1,71 @@
+# Draft client. Content to be approved.
+# Every question reveals one fact. The goal and cares decide how he takes the result; details are noise.
+# Words in [brackets] direct the voice delivery and are hidden on screen.
+id: vinny
+name: Vinny Russo
+age: 38
+profession: Mall security guard
+tier: "$"
+persona: A New York Italian-American who talks big, with loud salesman confidence, but the cracks show fast. Gets defensive, says "trust me" a lot, and is more tired of his own lie than he lets on.
+voice_description: A New York Italian-American man in his late thirties, loud and brassy, with salesman swagger and a confidence that cracks when he's pushed.
+voice_id: p7V7gh3ielSMULmg38Rt    # "Vinny", made in Voice Design
+opening_line: "Hey, I'm Vinny Russo. I need to win the lottery tonight. It's as simple as that, my friend."
+goodbye_line: "Alright, I gotta go pick up my suit from the dry cleaner. Make it happen, okay? I need big numbers. Trust me on this."
+
+facts:
+  - id: goal
+    kind: goal
+    label: Why tonight?
+    value: His 20-year high school reunion is at seven tonight. He's told everyone online for years that he runs a tech company. He needs to walk in looking that successful.
+  - id: job
+    kind: detail
+    label: His job?
+    value: Night security at the mall, fifteen years.
+  - id: money
+    kind: detail
+    label: The money?
+    value: He'd hire someone to build Russo Tech an app, then buy a small boat.
+  - id: lisa
+    kind: care
+    label: Who'll be there?
+    value: Lisa, his high school girlfriend. She's the one he really wants to impress.
+  - id: real
+    kind: care
+    label: Why not keep faking?
+    value: He's tired of keeping the lie going. Making people believe it doesn't count; he wants it to actually be true.
+  - id: numbers
+    kind: detail
+    label: His numbers?
+    value: Same numbers every week. Lisa's birthday.
+
+# Questions with `requires` only appear once those facts are on the notepad.
+questions:
+  - id: tonight
+    text: Why tonight?
+    reveals: goal
+    answer: "Alright, this stays between you and me. My twenty-year reunion is at seven tonight. For ten years I've been telling everybody online I run a tech company. I don't. I gotta walk in there looking like the guy I said I was."
+  - id: work
+    text: What do you do for work?
+    reveals: job
+    answer: "I work security at the mall. I've done nights there for fifteen years. It's honest work, and I'm very good at it. In fifteen years I've had zero incidents. Well, I've had one incident."
+  - id: money
+    text: What would you do with the money?
+    reveals: money
+    answer: "First thing, I'm hiring a kid who knows computers, so Russo Tech finally has an app. Then I'm buying a boat, a small one. I'm not crazy."
+  - id: who
+    text: Who's going to be there?
+    requires: [goal]
+    reveals: lisa
+    answer: "Everybody's coming, but the one who matters is Lisa. We dated senior year. She's the one I want looking at me tonight, thinking, 'that guy made it.'"
+  - id: faking
+    text: Why not just keep the story going?
+    requires: [goal]
+    reveals: real
+    answer: "[sighs] Because I'm tired. For ten years I've kept this story straight, with fake business trips and a stock photo of an office. I don't want to fake it for one more night. I want to walk in there and have it be real."
+  - id: numbers
+    text: What numbers do you play?
+    requires: [lisa]
+    reveals: numbers
+    answer: "I play the same ones every week. They're Lisa's birthday... Don't make it weird. It's not weird."
+
+refused_review: "I asked for one simple thing, and this broker came back with nothing. They're all talk and no results. I'd give zero stars if they let me."

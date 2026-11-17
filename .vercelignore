@@ -1,0 +1,14 @@
+# Not needed to build or run the hosted game
+.env
+.env.local
+assets/
+mockup/
+elevenlabs prompt samples.txt
+server/tests/
+server/scripts/
+server/voice_ledger.jsonl
+server/sounds.yaml
+web/node_modules/
+web/dist/
+**/__pycache__/
+.pytest_cache/

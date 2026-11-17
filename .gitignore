@@ -1,0 +1,22 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+web/dist/
+.vercel
+# Local secrets written by `elevenlabs onboard`
+/.env.local
+server/voice_ledger.jsonl
+.env*
+!.env.example
+
+# Local only: planning notes, source art and sound, scratch files, and the TTS cache
+TODO.md
+assets/
+mockup/
+elevenlabs prompt samples.txt
+server/sounds.yaml
+server/scripts/make_sounds.py
+web/public/audio/cache/
+web/public/audio/sfx/manifest.json
