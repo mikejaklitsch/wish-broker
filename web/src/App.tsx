@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import Desk, { type Spot } from './Desk';
 import type { Lighting } from './lighting';
-import { CallPanel, Granting, IntroPanel, Notepad, Overlay, ResultPanel, Roster, type Rating, ReviewPanel, WinPanel, WishPanel, type CallLine } from './panels';
+import { CallPanel, Granting, IntroPanel, Notepad, Overlay, ResultPanel, Roster, type Rating, ReviewPanel, type RosterEntry, WinPanel, WishPanel, type CallLine } from './panels';
 import { bell, getVolume, ring, say, setVolume, sfx, tick } from './sound';
 
-import type { ClientCard, GameConfig, GrantResult, Line } from './types.gen';
+import type { CallCard, ClientCard, GameConfig, GrantResult, Line } from './types.gen';
 
 type Panel = 'none' | 'call' | 'notepad' | 'wish' | 'granting' | 'result' | 'review' | 'won';
 
@@ -28,6 +28,7 @@ interface Job {
 export default function App() {
   const [cfg, setCfg] = useState<GameConfig | null>(null);
   const [cards, setCards] = useState<ClientCard[]>([]);
+  const [generated, setGenerated] = useState<CallCard[]>([]);     // new clients, one written each time a client is picked
   const [loadError, setLoadError] = useState('');
   // Nothing is saved: every page load is a fresh game.
   const [ratings, setRatings] = useState<Record<string, Rating>>({});     // each client's latest result
@@ -56,6 +57,17 @@ export default function App() {
       .then(([c, cs]) => { setCfg(c); setCards(cs); })
       .catch(e => setLoadError(String(e)));
   }, []);
+
+  // Generated clients are deleted on the server once untouched for an hour; refresh the ones on this list while the game is open.
+  const generatedIds = useRef<string[]>([]);
+  generatedIds.current = generated.map(g => g.agent_id);
+  useEffect(() => {
+    if (!cfg || cfg.voice_fake) return;
+    const t = setInterval(() => {
+      if (generatedIds.current.length) api.keepAlive({ agent_ids: generatedIds.current }).catch(e => console.warn('Keep-alive failed:', e));
+    }, cfg.keep_alive_minutes * 60_000);
+    return () => clearInterval(t);
+  }, [cfg]);
 
   // The lava lamp shows karma: dim when broke, full glow at the win line.
   useEffect(() => {
@@ -168,9 +180,17 @@ export default function App() {
   // ---------------------------------------------------------------- incoming calls
   // The player picks a client from the notepad; that client calls in a moment later.
   const [queued, setQueued] = useState(false);
-  const pick = (c: ClientCard) => {
+  const roster: RosterEntry[] = [
+    ...cards.map(c => ({ id: c.id, name: c.name, profession: c.profession, scripted: c })),
+    ...generated.map(g => ({ id: g.agent_id, name: g.name, profession: g.profession, live: g })),
+  ];
+  const pick = (e: RosterEntry) => {
+    const c = e.scripted;
+    if (!c) return;
     setPanel('none'); setQueued(true);
     setTimeout(() => { setQueued(false); setCaller(c); stopRing.current = ring(); }, 2000);
+    // Write the next client while this one plays, so they're on the list for the next round.
+    if (!cfg?.voice_fake) api.generate().then(g => setGenerated(gs => [...gs, g])).catch(e => console.warn('No new client:', e));
   };
   const answer = () => {
     if (!caller) return;
@@ -227,7 +247,7 @@ export default function App() {
       {panel === 'notepad' && (
         <Overlay onClose={() => setPanel('none')}>
           {job ? <Notepad client={job.client} revealed={job.revealed} />
-            : <Roster cards={cards} ratings={ratings} karma={karma} winKarma={cfg?.win_karma ?? 100} busy={queued || ringing}
+            : <Roster cards={roster} ratings={ratings} karma={karma} winKarma={cfg?.win_karma ?? 100} busy={queued || ringing}
                 onPick={pick} onRestart={restart} />}
         </Overlay>
       )}

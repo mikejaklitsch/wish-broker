@@ -81,6 +81,48 @@ class ClientCard(BaseModel):
     goodbye: Line
     facts: list[FactLabel]
     questions: list[QuestionLabel]
+    agent_id: Optional[str] = Field(default=None, description="The client's call agent, once synced")
+
+
+# ---------------------------------------------------------------- live call agents
+class ClientSpec(BaseModel):
+    """A client as their call agent plays them: written by the writer agent, or built from a client file.
+    Server-only: holds the secrets. Once the agent exists, its config is the only copy."""
+    name: str
+    age: int
+    profession: str
+    tier: Tier = "$"
+    persona: str
+    situation: str = Field(description="Background the agent improvises from")
+    opening_line: str
+    voice_id: str
+    facts: list[Fact] = Field(description="One goal, the cares, and the details")
+
+
+class NoteSlot(BaseModel):
+    """A line on the notepad, shown as '?' until the client's agent fills it in during the call."""
+    id: str
+    label: str
+
+
+class CallCard(BaseModel):
+    """What the browser may see about a client before a live call."""
+    agent_id: str
+    name: str
+    age: int
+    profession: str
+    tier: Tier
+    pay_min: int
+    pay_max: int
+    notes: list[NoteSlot] = Field(description="The goal and the cares; details aren't noted")
+
+
+class SignedUrl(BaseModel):
+    signed_url: str
+
+
+class KeepAlive(BaseModel):
+    agent_ids: list[str] = Field(description="Generated clients still on an open game's list")
 
 
 class GameConfig(BaseModel):
@@ -94,6 +136,7 @@ class GameConfig(BaseModel):
     genie_rubs: list[Line] = Field(description="The genie's lines when the lamp is rubbed; one is played at random")
     llm_fake: bool
     voice_fake: bool
+    keep_alive_minutes: int = Field(description="How often to send the generated clients on the list to /clients/keep-alive")
 
 
 # ---------------------------------------------------------------- the call
@@ -161,5 +204,5 @@ class GenieTestOutput(BaseModel):
 # Models exported to the frontend.
 API_MODELS = [
     GameConfig, ClientCard, Line, FactLabel, QuestionLabel, AskRequest, AskResponse, RevealedFact,
-    GrantRequest, GrantResult, Scorecard, Bill,
+    GrantRequest, GrantResult, Scorecard, Bill, CallCard, NoteSlot, SignedUrl, KeepAlive,
 ]

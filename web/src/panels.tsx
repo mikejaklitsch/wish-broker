@@ -1,6 +1,6 @@
 // The overlays that open from desk objects. Each is a plain component driven by props; no game logic here.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ClientCard, GameConfig, GrantResult } from './types.gen';
+import type { CallCard, ClientCard, GameConfig, GrantResult } from './types.gen';
 
 export function Overlay({ children, onClose, wide }: { children: ReactNode; onClose?: () => void; wide?: boolean }) {
   useEffect(() => {
@@ -19,21 +19,27 @@ export function Overlay({ children, onClose, wide }: { children: ReactNode; onCl
 // ---------------------------------------------------------------- notepad: tonight's clients
 export interface Rating { stars: number; pay: number }
 
+/** A client on tonight's list: a hand-made one (scripted call) or a generated one (live call agent). */
+export type RosterEntry = { id: string; name: string; profession: string; scripted?: ClientCard; live?: CallCard };
+
 export function Roster({ cards, ratings, karma, winKarma, busy, onPick, onRestart }: {
-  cards: ClientCard[]; ratings: Record<string, Rating>; karma: number; winKarma: number; busy: boolean;
-  onPick: (c: ClientCard) => void; onRestart: () => void;
+  cards: RosterEntry[]; ratings: Record<string, Rating>; karma: number; winKarma: number; busy: boolean;
+  onPick: (c: RosterEntry) => void; onRestart: () => void;
 }) {
   const allDone = cards.length > 0 && cards.every(c => c.id in ratings);
+  const ordered = [...cards.filter(c => !(c.id in ratings)), ...cards.filter(c => c.id in ratings)];     // finished clients sink to the bottom
   return (
     <div className="pad">
       <p className="hand pad-title">Tonight's clients</p>
       <p className="hand muted">{busy ? 'The phone will ring any second.' : allDone ? `That's everyone. Karma: ${karma} of ${winKarma}. Pick anyone to try again.` : 'Pick who calls next.'}</p>
       <ul className="roster">
-        {cards.map(c => {
+        {ordered.map(c => {
           const r = ratings[c.id];
+          const waiting = !c.scripted;     // live calls aren't wired into the call panel yet
           return (
             <li key={c.id}>
-              <button className="hand" disabled={busy} onClick={() => onPick(c)} title={r ? 'Try again; the new result replaces this one' : undefined}>
+              <button className="hand" disabled={busy || waiting} onClick={() => onPick(c)}
+                title={waiting ? 'Live call coming soon' : r ? 'Try again; the new result replaces this one' : undefined}>
                 <span className="r-name">{c.name}</span>
                 <span className="r-job">{c.profession}</span>
                 {r && <span className="r-stars" aria-label={`${r.stars} out of 5 stars`}>{'★'.repeat(r.stars)}<span>{'★'.repeat(5 - r.stars)}</span> +{r.pay}</span>}

@@ -13,6 +13,10 @@ export interface Api {
   GrantResult?: GrantResult;
   Scorecard?: Scorecard;
   Bill?: Bill;
+  CallCard?: CallCard;
+  NoteSlot?: NoteSlot;
+  SignedUrl?: SignedUrl;
+  KeepAlive?: KeepAlive;
 }
 /**
  * Rules the browser needs. Served by the API so numbers live only in config.py.
@@ -33,6 +37,10 @@ export interface GameConfig {
   genie_rubs: Line1[];
   llm_fake: boolean;
   voice_fake: boolean;
+  /**
+   * How often to send the generated clients on the list to /clients/keep-alive
+   */
+  keep_alive_minutes: number;
 }
 /**
  * Something said out loud: the text, its recording if generated, and how long it takes.
@@ -76,6 +84,10 @@ export interface ClientCard {
   goodbye: Line1;
   facts: FactLabel[];
   questions: QuestionLabel[];
+  /**
+   * The client's call agent, once synced
+   */
+  agent_id?: string | null;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -195,4 +207,50 @@ export interface Line3 {
    */
   audio: string | null;
   seconds: number;
+}
+/**
+ * What the browser may see about a client before a live call.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "CallCard".
+ */
+export interface CallCard {
+  agent_id: string;
+  name: string;
+  age: number;
+  profession: string;
+  tier: "$" | "$$" | "$$$";
+  pay_min: number;
+  pay_max: number;
+  /**
+   * The goal and the cares; details aren't noted
+   */
+  notes: NoteSlot[];
+}
+/**
+ * A line on the notepad, shown as '?' until the client's agent fills it in during the call.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "NoteSlot".
+ */
+export interface NoteSlot {
+  id: string;
+  label: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "SignedUrl".
+ */
+export interface SignedUrl {
+  signed_url: string;
+}
+/**
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "KeepAlive".
+ */
+export interface KeepAlive {
+  /**
+   * Generated clients still on an open game's list
+   */
+  agent_ids: string[];
 }

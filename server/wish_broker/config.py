@@ -39,6 +39,18 @@ GENIE_VOICE = os.getenv("WB_GENIE_VOICE", "0").strip() == "1"
 # Played (recorded) whenever the live voice is on but unavailable: not enough credits left, or an error.
 GENIE_FALLBACK_LINE = "Nice wish."
 
+# ---- Live call agents (agents.py) ----
+AGENTS_FILE = SERVER / "agents.json"       # writer and hand-made client agent ids, written by scripts/sync_agents.py
+VOICE_POOL = SERVER / "voices.yaml"        # voices a generated client can be given
+WRITER_LLM = "claude-sonnet-5-5"           # writes new clients (text only)
+CLIENT_LLM = "claude-haiku-5-5"            # plays the client on the call; fast, for natural turn-taking
+AGENT_TTS_MODEL = "eleven_v4_turbo"
+CALL_MAX_SECONDS = 360                     # hard stop; the client is told to wrap up after about four minutes
+WRITER_TIMEOUT_S = 90
+GENERATED_TAG = "wish-broker-generated"    # generated client agents; deleted once untouched for this long:
+GENERATED_MAX_AGE_HOURS = 1
+KEEP_ALIVE_MINUTES = 20                    # how often an open game refreshes its generated clients
+
 # ---- Models (decide after evals) ----
 MODEL_GENIE = "gpt-4.1"
 CLAUDE_MODEL = "sonnet"     # used for every call when WB_LLM=claude

@@ -1,0 +1,23 @@
+# Voices for generated clients. One is picked at random, then the writer builds the client to fit its description.
+# Hand-made clients' own voices (Danny, Vinny, Kim) and the genie's are left out so nobody sounds like them.
+- {key: roger, id: CwhRBWXzGAHq8TQ4Fs17, about: "man, middle-aged, American, laid-back and casual"}
+- {key: sarah, id: EXAVITQu4vr4xnSDxMaL, about: "woman, young, American, mature and confident"}
+- {key: laura, id: FGY2WhTYpPnrIDTdsKH5, about: "woman, young, American, quirky and sassy"}
+- {key: charlie, id: IKne3meq5aSn9XLyUdCD, about: "man, young, Australian, deep and energetic"}
+- {key: george, id: JBFqnCBsd6RMkjVDRZzb, about: "man, middle-aged, British, warm storyteller"}
+- {key: callum, id: N2lVS1w4EtoT3dr4eOWO, about: "man, middle-aged, American, husky trickster"}
+- {key: river, id: SAz9YHcvj6GT2YYXdXww, about: "neutral gender, middle-aged, American, relaxed and calm"}
+- {key: harry, id: SOYHLrjzK2X1ezoPC6cr, about: "man, young, American, rough and fierce"}
+- {key: liam, id: TX3LPaxmHKxFdv7VOQHJ, about: "man, young, American, energetic and confident"}
+- {key: alice, id: Xb7hH8MSUJpSbSDYk0k2, about: "woman, middle-aged, British, clear and professional"}
+- {key: matilda, id: XrExE9yKIg1WjnnlVkGX, about: "woman, middle-aged, American, upbeat and knowledgeable"}
+- {key: will, id: bIHbv24MWmeRgasZH58o, about: "man, young, American, chill optimist"}
+- {key: jessica, id: cgSgspJ2msm6clMCkdW9, about: "woman, young, American, playful, bright and warm"}
+- {key: eric, id: cjVigY5qzO86Huf0OWal, about: "man, middle-aged, American, smooth and trustworthy"}
+- {key: bella, id: hpp4J3VqNfWAUOO0d1Us, about: "woman, middle-aged, American, bright and warm"}
+- {key: chris, id: iP95p4xoKVk53GoZ742B, about: "man, middle-aged, American, charming and down-to-earth"}
+- {key: brian, id: nPczCjzI2devNBz1zQrb, about: "man, middle-aged, American, deep and comforting"}
+- {key: daniel, id: onwK4e9ZLuTAKqWW03F9, about: "man, middle-aged, British, steady and formal"}
+- {key: lily, id: pFZP5JQG7iQjIQuC4Bku, about: "woman, middle-aged, British, velvety and confident"}
+- {key: adam, id: pNInz6obpgDQGcFmaJgB, about: "man, middle-aged, American, dominant and firm"}
+- {key: bill, id: pqHfZKP75CvOlQylNhV4, about: "man, old, American, wise and mature"}
