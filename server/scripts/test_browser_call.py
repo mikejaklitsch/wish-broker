@@ -58,6 +58,8 @@ def main():
         page = browser.new_context(permissions=["microphone"], viewport={"width": 1376, "height": 768}).new_page()
         errors = []
         page.on("console", lambda m: m.type == "error" and errors.append(m.text))
+        varied = []      # the notes the call sent the client about pet words they've worn out
+        page.on("console", lambda m: m.text.startswith("[varied]") and varied.append(m.text))
         page.goto(a.url)
         page.get_by_role("button", name="Open for business").click()
         page.get_by_role("button", name="Turn on the light").click()
@@ -90,6 +92,8 @@ def main():
         for li in page.locator(".pad .ask, .facts li").all_inner_texts():
             print(" ", " ".join(li.split()))
         print("\nStatus:", page.locator(".call-head .clock").inner_text())
+        for v in varied:
+            print(" ", v)
         if page.get_by_role("button", name="Hang up").count():
             page.get_by_role("button", name="Hang up").click()
         if ok and a.wish:

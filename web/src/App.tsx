@@ -8,6 +8,7 @@ import { VoiceConversation } from '@elevenlabs/client';
 import { CallPanel, type CallStatus, Granting, IntroPanel, Notepad, Overlay, ResultPanel, Roster, type Rating, type Review, ReviewPanel, WinPanel, WishPanel, type CallLine, type Note } from './panels';
 import { bell, getVolume, ring, say, setVolume, sfx, tick, VOICE_VOLUME } from './sound';
 import { HeldAudio } from './held';
+import { wornNote } from './worn';
 
 import type { CallCard, GameConfig, GrantResult, Scorecard } from './types.gen';
 
@@ -194,6 +195,7 @@ export default function App() {
     };
     try {
       const { signed_url } = await api.signedUrl(c.agent_id);
+      const replies: string[] = [], told = new Map<string, number>();
       conv.current = await VoiceConversation.startSession({
         signedUrl: signed_url,
         clientTools: {
@@ -221,6 +223,9 @@ export default function App() {
           } else {
             log({ who: 'client', text: spoken(m.message), live: { raw: m.message, from: said } });
             said += m.message.length; awaitingReply = false;
+            replies.push(m.message);     // tell the client, unheard by the broker, which pet words they've worn out
+            const worn = wornNote(replies, told);
+            if (worn) { conv.current?.sendContextualUpdate(worn); console.info('[varied]', worn); }
           }
         },
         onAgentResponseCorrection: x => {

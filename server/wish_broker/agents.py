@@ -174,8 +174,10 @@ def client_config(spec: ClientSpec, name: str, tags: list[str]) -> dict:
                                        "tts": {"model_id": config.TTS_MODEL_EXPRESSIVE, "voice_id": config.GENIE_VOICE_ID}}}},
             "edges": {"pick_up": {"source": "start_node", "target": "client", "forward_condition": {"type": "unconditional"}}},
         },
-        # text_only may be switched on per session, for the automated test calls (scripts/test_call.py)
+        # text_only may be switched on per session, for the automated test calls (scripts/test_call.py).
+        # Prompt injection protection: a broker trying to override the client's instructions ends the call.
         "platform_settings": {"auth": {"enable_auth": True},
+                              "guardrails": {"version": "1", "prompt_injection": {"is_enabled": True}},
                               "overrides": {"conversation_config_override": {"conversation": {"text_only": True},
                                                                              "agent": {"first_message": True}},
                                             "enable_starting_workflow_node_id_from_client": True}},
