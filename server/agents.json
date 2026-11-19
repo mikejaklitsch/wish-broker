@@ -4,5 +4,11 @@
   "danny": "agent_4501m7r5bma1ezkv51hnysyx62y2",
   "kim": "agent_4201m7r5bp7ne70a509a6ext64tt",
   "vinny": "agent_9101m7r5br4xfzcbhth8srb9z4pv"
+ },
+ "test_broker": "agent_4201m7rb4acdecx9nwrfvnyb7vaq",
+ "tools": {
+  "note": "tool_6101m7re3a42f54rhhgrq3f4xd6a",
+  "review": "tool_7101m7rn4jyae57vpskn9taf2sgw",
+  "grant": "tool_1801m7s1k407fy7t8ja3nn7nqngr"
  }
 }

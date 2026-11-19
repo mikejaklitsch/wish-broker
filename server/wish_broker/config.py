@@ -43,9 +43,10 @@ GENIE_FALLBACK_LINE = "Nice wish."
 AGENTS_FILE = SERVER / "agents.json"       # writer and hand-made client agent ids, written by scripts/sync_agents.py
 VOICE_POOL = SERVER / "voices.yaml"        # voices a generated client can be given
 WRITER_LLM = "claude-sonnet-5-5"           # writes new clients (text only)
-CLIENT_LLM = "claude-haiku-5-5"            # plays the client on the call; fast, for natural turn-taking
+CLIENT_LLM = "claude-sonnet-5-5"            # plays the client on the call
 AGENT_TTS_MODEL = "eleven_v4_turbo"
-CALL_MAX_SECONDS = 360                     # hard stop; the client is told to wrap up after about four minutes
+CALL_SECONDS = 120                         # the call clock: when it runs out, the client wraps up and hangs up (App.tsx)
+CALL_MAX_SECONDS = 300                     # the server's own cap, a backstop: it counts from when the phone starts ringing
 WRITER_TIMEOUT_S = 90
 GENERATED_TAG = "wish-broker-generated"    # generated client agents; deleted once untouched for this long:
 GENERATED_MAX_AGE_HOURS = 1
@@ -71,7 +72,6 @@ GENIE_VOICE_TEST = os.getenv("WB_GENIE_VOICE_TEST", "0").strip() == "1"
 GENIE_TEST_SYSTEM = ("You are the genie in a game called Wish Broker: a vain, flamboyant English aristocrat who grants wishes "
                      "for a broker's clients and is politely contemptuous of how they word them. Reply to the wish in 1 to 5 words, "
                      "in character. You may open with one audio tag from this list: " + ", ".join(GENIE_TAGS) + ".")
-GENIE_TEST_REVIEW = "Test wish. The genie kept it short."
 GENIE_TAGS_OFFERED = 3
 GENIE_PHRASES_KEPT = 40     # how many of the genie's earlier stock phrases are shown to him, so he doesn't repeat himself
 GENIE_IDEAS = 5           # the genie drafts this many ways to grant; the server picks one at random
@@ -79,7 +79,6 @@ WIN_KARMA = 100
 START_KARMA = 0
 
 # ---- Call and wish ----
-QUESTIONS_PER_CALL = 3       # questions the broker may ask each client
 WISH_SECONDS = 90            # time to write the wish once the kitchen timer is started
 TIMEOUT_PENALTY = 10        # karma lost when the clock runs out with nothing written; the clock can then be started again
 CHARS_PER_SECOND = 14        # estimate for lines that have no recording yet

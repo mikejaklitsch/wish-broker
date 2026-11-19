@@ -9,6 +9,5 @@ STARS = {
 }
 
 
-def stars(card: Scorecard | None) -> int:
-    """No scorecard means the genie refused: 1 star."""
-    return 1 if card is None else STARS[card.goal_met][card.feeling]
+def stars(card: Scorecard) -> int:
+    return STARS[card.goal_met][card.feeling]

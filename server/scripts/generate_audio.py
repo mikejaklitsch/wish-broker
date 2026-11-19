@@ -1,4 +1,4 @@
-"""Record every scripted line: client openings, answers, goodbyes and refused reviews, plus the genie's refusal and lamp-rub lines.
+"""Record the genie's fixed lines: the refusal, the fallback and the lamp-rub lines. Clients speak live on their calls.
 
   python scripts/generate_audio.py           dry run: list what would be recorded and the credits, send nothing
   python scripts/generate_audio.py --real    record for real (lines already recorded cost nothing)
@@ -15,18 +15,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 if "--real" in sys.argv:
     os.environ["WB_VOICE_DRY"] = "0"
-from wish_broker import clients, config, voice  # noqa: E402
-from wish_broker.lines import client_key, genie_key  # noqa: E402
+from wish_broker import config, voice  # noqa: E402
+from wish_broker.lines import genie_key  # noqa: E402
 
 
 def scripted():
     """(key, text, voice_id) for every line that is always the same."""
-    for c in clients.all_clients().values():
-        yield client_key(c.id, "opening"), c.opening_line, c.voice_id
-        for q in c.questions:
-            yield client_key(c.id, f"q_{q.id}"), q.answer, c.voice_id
-        yield client_key(c.id, "goodbye"), c.goodbye_line, c.voice_id
-        yield client_key(c.id, "refused_review"), c.refused_review, c.voice_id
     yield genie_key("refused"), config.REFUSAL_LINE, config.GENIE_VOICE_ID
     yield genie_key("nice_wish"), config.GENIE_FALLBACK_LINE, config.GENIE_VOICE_ID
     for i, text in enumerate(config.RUB_LINES, 1):

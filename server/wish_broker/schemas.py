@@ -15,22 +15,13 @@ Feeling = Literal["happy", "mixed", "upset"]
 
 # ---------------------------------------------------------------- client files
 class Fact(BaseModel):
-    """One line on the notepad, filled in when its question is asked.
-    goal: what the client is really after. care: something they'd be happy or upset about.
+    """Something true about a client. The goal and cares are lines on the notepad, filled in when the client says them.
+    goal: what the client consciously wants. care: a requirement they haven't realized matters.
     detail: true but irrelevant. The goal and cares decide how the client feels about the result."""
     id: str
     kind: FactKind
-    label: str = Field(description="Shown next to the '?' before it is revealed, e.g. 'Who is the cake for?'")
+    label: str = Field(description="A short heading for this fact, for the client file and test reports")
     value: str = Field(description="What gets written in once revealed")
-
-
-class Question(BaseModel):
-    """A scripted question the broker can ask, with the client's recorded answer."""
-    id: str
-    text: str = Field(description="What the broker asks")
-    answer: str = Field(description="What the client says back (may include audio tags like [sighs])")
-    reveals: str = Field(description="The fact this answer puts on the notepad. Every answer reveals one; only the goal and cares affect the score")
-    requires: list[str] = Field(default_factory=list, description="Fact ids that must be on the notepad before this question can be asked")
 
 
 class ClientFile(BaseModel):
@@ -40,13 +31,11 @@ class ClientFile(BaseModel):
     age: int
     profession: str
     tier: Tier
-    persona: str = Field(description="How they talk; used to write lines and design the voice")
+    persona: str = Field(description="How they talk")
     voice_description: str = Field(description="Prompt for Voice Design")
-    opening_line: str
-    goodbye_line: str = Field(description="Said when the call timer runs out")
+    situation: str = Field(description="Background the call agent improvises from")
+    first_message: str = Field(description="Their opening line when the broker picks up")
     facts: list[Fact]
-    questions: list[Question]
-    refused_review: str = Field(description="Their review when the genie refuses to grant anything")
     voice_id: str = ""
 
 
@@ -55,33 +44,6 @@ class Line(BaseModel):
     text: str
     audio: Optional[str] = Field(description="URL of the recording, or null when not generated yet")
     seconds: float
-
-
-class FactLabel(BaseModel):
-    id: str
-    label: str
-    requires: list[str] = Field(description="Same gate as the question that reveals it; the line stays off the notepad until then")
-
-
-class QuestionLabel(BaseModel):
-    id: str
-    text: str
-    requires: list[str]
-
-
-class ClientCard(BaseModel):
-    """What the browser may see about a client before the call: name, job and pay only. Everything else comes from the call."""
-    id: str
-    name: str
-    profession: str
-    tier: Tier
-    pay_min: int
-    pay_max: int
-    opening: Line
-    goodbye: Line
-    facts: list[FactLabel]
-    questions: list[QuestionLabel]
-    agent_id: Optional[str] = Field(default=None, description="The client's call agent, once synced")
 
 
 # ---------------------------------------------------------------- live call agents
@@ -94,15 +56,9 @@ class ClientSpec(BaseModel):
     tier: Tier = "$"
     persona: str
     situation: str = Field(description="Background the agent improvises from")
-    opening_line: str
+    first_message: str = Field(default="", description="Their opening line when the broker picks up, spoken as written")
     voice_id: str
     facts: list[Fact] = Field(description="One goal, the cares, and the details")
-
-
-class NoteSlot(BaseModel):
-    """A line on the notepad, shown as '?' until the client's agent fills it in during the call."""
-    id: str
-    label: str
 
 
 class CallCard(BaseModel):
@@ -112,9 +68,9 @@ class CallCard(BaseModel):
     age: int
     profession: str
     tier: Tier
+    ask: str = Field(description="What they called to ask for, for the top of the notepad")
     pay_min: int
     pay_max: int
-    notes: list[NoteSlot] = Field(description="The goal and the cares; details aren't noted")
 
 
 class SignedUrl(BaseModel):
@@ -129,30 +85,14 @@ class GameConfig(BaseModel):
     """Rules the browser needs. Served by the API so numbers live only in config.py."""
     win_karma: int
     start_karma: int
-    questions_per_call: int
     wish_seconds: int
+    call_seconds: int
     timeout_penalty: int
     genie_refused: Line = Field(description="The genie's refusal, also said when the wish clock runs out with nothing written")
     genie_rubs: list[Line] = Field(description="The genie's lines when the lamp is rubbed; one is played at random")
     llm_fake: bool
     voice_fake: bool
     keep_alive_minutes: int = Field(description="How often to send the generated clients on the list to /clients/keep-alive")
-
-
-# ---------------------------------------------------------------- the call
-class AskRequest(BaseModel):
-    client_id: str
-    question_id: str
-
-
-class RevealedFact(BaseModel):
-    id: str
-    value: str
-
-
-class AskResponse(BaseModel):
-    answer: Line
-    revealed: list[RevealedFact]
 
 
 # ---------------------------------------------------------------- grant
@@ -162,39 +102,43 @@ class GrantRequest(BaseModel):
     used_phrases: list[str] = Field(default_factory=list, description="The genie's stock phrases from earlier outcomes this session, so he doesn't repeat himself")
 
 
+class GrantResult(BaseModel):
+    refused: bool = Field(description="Not a wish the genie will grant; nothing happens and the broker can wish again")
+    genie: Line = Field(description="What the genie says: what happened to the client, or the recorded refusal")
+    phrases: list[str] = Field(default_factory=list, description="The genie's stock phrases in this outcome; send them back as used_phrases")
+
+
+class GenieStart(BaseModel):
+    """What the browser needs to start the live genie on a wish."""
+    signed_url: str
+    variables: dict[str, str] = Field(description="Passed to the session as dynamic variables")
+
+
+# ---------------------------------------------------------------- the callback
 class Scorecard(BaseModel):
-    """How the client took the result. Stars come from these two answers through a fixed table."""
+    """How the client took the result, from their review on the callback. Stars come from these two answers through a fixed table."""
     goal_met: GoalMet
     feeling: Feeling = Field(description="How the client feels about everything else that happened, given what they care about")
-    note: str = Field(description="One plain sentence on both")
 
 
 class Bill(BaseModel):
     pay: int
 
 
-class GrantResult(BaseModel):
-    refused: bool
-    genie: Line = Field(description="What the genie says: what happened to the client, or the recorded refusal")
-    scorecard: Optional[Scorecard]
+class ScoreResult(BaseModel):
     stars: int
     bill: Bill
-    review: Line = Field(description="The client's review of the broker, in their voice, about what happened")
-    phrases: list[str] = Field(default_factory=list, description="The genie's stock phrases in this outcome; send them back as used_phrases")
 
 
 # ---------------------------------------------------------------- LLM output shapes
 class GenieOutput(BaseModel):
     is_wish: bool = Field(description="False when the text is inappropriate or contains no wish request; nothing else is then used")
+    open: list[str] = Field(default_factory=list, description="What the client is after or cares about that the wish doesn't secure, one line each")
     ideas: list[str] = Field(description="Five different ways to grant this wish, one line each")
     chosen_idea: str = Field(description="The idea you were told to grant, copied exactly")
     twisted_phrase: str = Field(description="The exact words of the wish the twist hangs on, or '' if granted as meant")
     outcome: str
     phrases: list[str] = Field(default_factory=list, description="The stock parts of the outcome, word for word, 1 to 6 words each")
-    goal_met: GoalMet
-    feeling: Feeling
-    note: str
-    review: str
 
 
 class GenieTestOutput(BaseModel):
@@ -203,6 +147,5 @@ class GenieTestOutput(BaseModel):
 
 # Models exported to the frontend.
 API_MODELS = [
-    GameConfig, ClientCard, Line, FactLabel, QuestionLabel, AskRequest, AskResponse, RevealedFact,
-    GrantRequest, GrantResult, Scorecard, Bill, CallCard, NoteSlot, SignedUrl, KeepAlive,
+    GameConfig, Line, GrantRequest, GrantResult, GenieStart, Scorecard, Bill, ScoreResult, CallCard, SignedUrl, KeepAlive,
 ]

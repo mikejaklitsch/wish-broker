@@ -33,9 +33,5 @@ def line(text: str, key: str) -> Line:
 
 
 # Audio keys, so the generator and the server agree on file names.
-def client_key(client_id: str, part: str) -> str:
-    return f"clients/{client_id}/{part}"
-
-
 def genie_key(line_id: str) -> str:
     return f"genie/{line_id}"

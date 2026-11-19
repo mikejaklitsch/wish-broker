@@ -2,19 +2,14 @@
 
 export interface Api {
   GameConfig?: GameConfig;
-  ClientCard?: ClientCard;
   Line?: Line1;
-  FactLabel?: FactLabel;
-  QuestionLabel?: QuestionLabel;
-  AskRequest?: AskRequest;
-  AskResponse?: AskResponse;
-  RevealedFact?: RevealedFact;
   GrantRequest?: GrantRequest;
   GrantResult?: GrantResult;
+  GenieStart?: GenieStart;
   Scorecard?: Scorecard;
   Bill?: Bill;
+  ScoreResult?: ScoreResult;
   CallCard?: CallCard;
-  NoteSlot?: NoteSlot;
   SignedUrl?: SignedUrl;
   KeepAlive?: KeepAlive;
 }
@@ -27,8 +22,8 @@ export interface Api {
 export interface GameConfig {
   win_karma: number;
   start_karma: number;
-  questions_per_call: number;
   wish_seconds: number;
+  call_seconds: number;
   timeout_penalty: number;
   genie_refused: Line;
   /**
@@ -43,7 +38,7 @@ export interface GameConfig {
   keep_alive_minutes: number;
 }
 /**
- * Something said out loud: the text, its recording if generated, and how long it takes.
+ * The genie's refusal, also said when the wish clock runs out with nothing written
  */
 export interface Line {
   text: string;
@@ -68,73 +63,6 @@ export interface Line1 {
   seconds: number;
 }
 /**
- * What the browser may see about a client before the call: name, job and pay only. Everything else comes from the call.
- *
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "ClientCard".
- */
-export interface ClientCard {
-  id: string;
-  name: string;
-  profession: string;
-  tier: "$" | "$$" | "$$$";
-  pay_min: number;
-  pay_max: number;
-  opening: Line1;
-  goodbye: Line1;
-  facts: FactLabel[];
-  questions: QuestionLabel[];
-  /**
-   * The client's call agent, once synced
-   */
-  agent_id?: string | null;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "FactLabel".
- */
-export interface FactLabel {
-  id: string;
-  label: string;
-  /**
-   * Same gate as the question that reveals it; the line stays off the notepad until then
-   */
-  requires: string[];
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "QuestionLabel".
- */
-export interface QuestionLabel {
-  id: string;
-  text: string;
-  requires: string[];
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "AskRequest".
- */
-export interface AskRequest {
-  client_id: string;
-  question_id: string;
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "AskResponse".
- */
-export interface AskResponse {
-  answer: Line1;
-  revealed: RevealedFact[];
-}
-/**
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "RevealedFact".
- */
-export interface RevealedFact {
-  id: string;
-  value: string;
-}
-/**
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "GrantRequest".
  */
@@ -151,12 +79,11 @@ export interface GrantRequest {
  * via the `definition` "GrantResult".
  */
 export interface GrantResult {
+  /**
+   * Not a wish the genie will grant; nothing happens and the broker can wish again
+   */
   refused: boolean;
   genie: Line2;
-  scorecard: Scorecard | null;
-  stars: number;
-  bill: Bill;
-  review: Line3;
   /**
    * The genie's stock phrases in this outcome; send them back as used_phrases
    */
@@ -174,7 +101,22 @@ export interface Line2 {
   seconds: number;
 }
 /**
- * How the client took the result. Stars come from these two answers through a fixed table.
+ * What the browser needs to start the live genie on a wish.
+ *
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "GenieStart".
+ */
+export interface GenieStart {
+  signed_url: string;
+  /**
+   * Passed to the session as dynamic variables
+   */
+  variables: {
+    [k: string]: string;
+  };
+}
+/**
+ * How the client took the result, from their review on the callback. Stars come from these two answers through a fixed table.
  *
  * This interface was referenced by `Api`'s JSON-Schema
  * via the `definition` "Scorecard".
@@ -185,10 +127,6 @@ export interface Scorecard {
    * How the client feels about everything else that happened, given what they care about
    */
   feeling: "happy" | "mixed" | "upset";
-  /**
-   * One plain sentence on both
-   */
-  note: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema
@@ -198,15 +136,12 @@ export interface Bill {
   pay: number;
 }
 /**
- * Something said out loud: the text, its recording if generated, and how long it takes.
+ * This interface was referenced by `Api`'s JSON-Schema
+ * via the `definition` "ScoreResult".
  */
-export interface Line3 {
-  text: string;
-  /**
-   * URL of the recording, or null when not generated yet
-   */
-  audio: string | null;
-  seconds: number;
+export interface ScoreResult {
+  stars: number;
+  bill: Bill;
 }
 /**
  * What the browser may see about a client before a live call.
@@ -220,22 +155,12 @@ export interface CallCard {
   age: number;
   profession: string;
   tier: "$" | "$$" | "$$$";
+  /**
+   * What they called to ask for, for the top of the notepad
+   */
+  ask: string;
   pay_min: number;
   pay_max: number;
-  /**
-   * The goal and the cares; details aren't noted
-   */
-  notes: NoteSlot[];
-}
-/**
- * A line on the notepad, shown as '?' until the client's agent fills it in during the call.
- *
- * This interface was referenced by `Api`'s JSON-Schema
- * via the `definition` "NoteSlot".
- */
-export interface NoteSlot {
-  id: string;
-  label: string;
 }
 /**
  * This interface was referenced by `Api`'s JSON-Schema

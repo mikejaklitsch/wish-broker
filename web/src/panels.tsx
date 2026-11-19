@@ -1,6 +1,6 @@
 // The overlays that open from desk objects. Each is a plain component driven by props; no game logic here.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { CallCard, ClientCard, GameConfig, GrantResult } from './types.gen';
+import type { CallCard, GameConfig, GrantResult, Scorecard } from './types.gen';
 
 export function Overlay({ children, onClose, wide }: { children: ReactNode; onClose?: () => void; wide?: boolean }) {
   useEffect(() => {
@@ -19,27 +19,23 @@ export function Overlay({ children, onClose, wide }: { children: ReactNode; onCl
 // ---------------------------------------------------------------- notepad: tonight's clients
 export interface Rating { stars: number; pay: number }
 
-/** A client on tonight's list: a hand-made one (scripted call) or a generated one (live call agent). */
-export type RosterEntry = { id: string; name: string; profession: string; scripted?: ClientCard; live?: CallCard };
-
 export function Roster({ cards, ratings, karma, winKarma, busy, onPick, onRestart }: {
-  cards: RosterEntry[]; ratings: Record<string, Rating>; karma: number; winKarma: number; busy: boolean;
-  onPick: (c: RosterEntry) => void; onRestart: () => void;
+  cards: CallCard[]; ratings: Record<string, Rating>; karma: number; winKarma: number; busy: boolean;
+  onPick: (c: CallCard) => void; onRestart: () => void;
 }) {
-  const allDone = cards.length > 0 && cards.every(c => c.id in ratings);
-  const ordered = [...cards.filter(c => !(c.id in ratings)), ...cards.filter(c => c.id in ratings)];     // finished clients sink to the bottom
+  const done = (c: CallCard) => c.agent_id in ratings;
+  const allDone = cards.length > 0 && cards.every(done);
+  const ordered = [...cards.filter(c => !done(c)), ...cards.filter(done)];     // finished clients sink to the bottom
   return (
     <div className="pad">
       <p className="hand pad-title">Tonight's clients</p>
       <p className="hand muted">{busy ? 'The phone will ring any second.' : allDone ? `That's everyone. Karma: ${karma} of ${winKarma}. Pick anyone to try again.` : 'Pick who calls next.'}</p>
       <ul className="roster">
         {ordered.map(c => {
-          const r = ratings[c.id];
-          const waiting = !c.scripted;     // live calls aren't wired into the call panel yet
+          const r = ratings[c.agent_id];
           return (
-            <li key={c.id}>
-              <button className="hand" disabled={busy || waiting} onClick={() => onPick(c)}
-                title={waiting ? 'Live call coming soon' : r ? 'Try again; the new result replaces this one' : undefined}>
+            <li key={c.agent_id}>
+              <button className="hand" disabled={busy} onClick={() => onPick(c)} title={r ? 'Try again; the new result replaces this one' : undefined}>
                 <span className="r-name">{c.name}</span>
                 <span className="r-job">{c.profession}</span>
                 {r && <span className="r-stars" aria-label={`${r.stars} out of 5 stars`}>{'★'.repeat(r.stars)}<span>{'★'.repeat(5 - r.stars)}</span> +{r.pay}</span>}
@@ -54,72 +50,86 @@ export function Roster({ cards, ratings, karma, winKarma, busy, onPick, onRestar
 }
 
 // ---------------------------------------------------------------- notepad: case file
-export function Notepad({ client, revealed, fresh }: { client: ClientCard | null; revealed: Record<string, string>; fresh?: Set<string> }) {
+/** Something the client told the broker, jotted down by their agent's note tool. ask: what they called to ask for. */
+export interface Note { text: string; ask?: boolean }
+
+/** What the client has said so far, one line per note in the order it came up, with what they asked for kept at the top.
+ *  Nothing marks which lines matter to the wish: that's for the broker to judge. */
+export function Notepad({ client, notes, fresh }: { client: CallCard | null; notes: Note[]; fresh?: Set<string> }) {
   if (!client) return <div className="pad"><p className="hand">No client on the line.</p></div>;
+  const ask = notes.find(n => n.ask);
   return (
     <div className="pad">
       <p className="hand pad-title">{client.name}</p>
+      {ask && <p className={`hand ask${fresh?.has(ask.text) ? ' fresh' : ''}`}><span className="muted">Asked for:</span> {ask.text}</p>}
       <ul className="facts">
-        {client.facts.filter(f => f.requires.every(r => r in revealed)).map(f => {
-          const v = revealed[f.id];
-          return (
-            <li key={f.id} className={`${v ? 'known' : 'unknown'}${fresh?.has(f.id) ? ' fresh' : ''}`}>
-              <span className="box" aria-hidden="true">{v ? '✓' : '?'}</span>
-              <span className="hand q">{f.label}</span>
-              {v && <span className="hand a">{v}</span>}
-            </li>
-          );
-        })}
+        {notes.filter(n => n !== ask).map(n => (
+          <li key={n.text} className={`known${fresh?.has(n.text) ? ' fresh' : ''}`}>
+            <span className="hand" aria-hidden="true">•</span>
+            <span className="hand a">{n.text}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );
 }
 
-// ---------------------------------------------------------------- the call: scripted questions
-export interface CallLine { who: 'broker' | 'client'; text: string }
+// ---------------------------------------------------------------- the call: live, with the client's agent
+export interface CallLine {
+  who: 'broker' | 'client'; text: string;
+  live?: { raw: string; from: number };     // still being spoken: shown as far as it's been heard (see App's typed)
+}
+export type CallStatus = 'connecting' | 'live' | 'over';
 
-export function CallPanel({ client, log, asked, questionsLeft, totalQuestions, talking, ended, revealed, fresh, onAsk, onHangUp }: {
-  client: ClientCard; log: CallLine[]; asked: Set<string>; questionsLeft: number; totalQuestions: number;
-  talking: boolean; ended: boolean; revealed: Record<string, string>; fresh: Set<string>;
-  onAsk: (questionId: string) => void; onHangUp: () => void;
+export function CallPanel({ client, log, status, talking, notes, fresh, secondsLeft, mic, onHangUp }: {
+  client: CallCard; log: CallLine[]; status: CallStatus; talking: boolean; notes: Note[]; fresh: Set<string>;
+  secondsLeft?: number;     // the call clock; the callback has none
+  mic?: number;             // the broker's mic: -1 off, else bars 0..5, plus 10 while the call hears a voice
+  onHangUp: () => void;
 }) {
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [log]);
   const first = client.name.split(' ')[0];
+  const state = status === 'connecting' ? 'Connecting…' : status === 'over' ? 'Call ended' : talking ? `${first} is talking` : 'Listening…';
   return (
     <Overlay wide>
       <div className="split">
         <div className="call">
           <div className="call-head type">
             <span>On the line: {client.name}</span>
-            <span className={`clock${questionsLeft <= 1 ? ' low' : ''}`}>{questionsLeft} of {totalQuestions} questions left</span>
+            <span className={`clock${secondsLeft !== undefined && secondsLeft <= 15 ? ' low' : ''}`}>
+              {state}
+              {secondsLeft !== undefined && status === 'live' && (secondsLeft > 0
+                ? ` · ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}` : " · Time's up")}
+            </span>
           </div>
           <div className="call-log" ref={logRef}>
             {log.map((l, i) => (
-              <p key={i} className={`line ${l.who}`}><b>{l.who === 'client' ? first : 'You'}:</b> {l.text}</p>
+              <p key={i} className={`line ${l.who}${l.live ? ' live' : ''}`}><b>{l.who === 'client' ? first : 'You'}:</b> {l.text}</p>
             ))}
           </div>
-          {!ended && (
-            <div className="questions">
-              {client.questions.filter(q => q.requires.every(r => r in revealed)).map(q => (
-                <button key={q.id} className={`question${q.requires.some(r => fresh.has(r)) && !asked.has(q.id) ? ' unlocked' : ''}`}
-                  disabled={talking || asked.has(q.id)} onClick={() => onAsk(q.id)}>
-                  {q.text}
-                </button>
-              ))}
-            </div>
-          )}
-          <button className="hangup" disabled={talking && !ended} onClick={onHangUp}>{ended ? 'Put the phone down' : 'Hang up'}</button>
+          {mic !== undefined && status === 'live' && <MicMeter mic={mic} />}
+          <button className="hangup" onClick={onHangUp}>{status === 'over' ? 'Put the phone down' : 'Hang up'}</button>
         </div>
-        <Notepad client={client} revealed={revealed} fresh={fresh} />
+        <Notepad client={client} notes={notes} fresh={fresh} />
       </div>
     </Overlay>
   );
 }
 
+function MicMeter({ mic }: { mic: number }) {
+  const off = mic < 0, heard = mic >= 10, bars = off ? 0 : mic % 10;
+  return (
+    <div className={`mic${off ? ' off' : ''}${heard ? ' heard' : ''}`}>
+      <span className="bars">{[1, 2, 3, 4, 5].map(b => <i key={b} className={b <= bars ? 'on' : ''} />)}</span>
+      {off ? 'Your mic is off' : heard ? 'Hearing you' : 'Your mic'}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- the wish contract
-export function WishPanel({ client, revealed, cfg, initial, secondsLeft, onDraft, onSeal, onClose }: {
-  client: ClientCard; revealed: Record<string, string>; cfg: GameConfig; initial: string; secondsLeft: number;
+export function WishPanel({ client, notes, cfg, initial, secondsLeft, onDraft, onSeal, onClose }: {
+  client: CallCard; notes: Note[]; cfg: GameConfig; initial: string; secondsLeft: number;
   onDraft: (draft: string) => void; onSeal: (wish: string) => void; onClose: (draft: string) => void;
 }) {
   const [wish, setWishState] = useState(initial);
@@ -142,14 +152,14 @@ export function WishPanel({ client, revealed, cfg, initial, secondsLeft, onDraft
             <button className="link" onClick={() => onClose(wish)}>Not yet</button>
           </div>
         </div>
-        <Notepad client={client} revealed={revealed} />
+        <Notepad client={client} notes={notes} />
       </div>
     </Overlay>
   );
 }
 
 // ---------------------------------------------------------------- genie's answer
-export function ResultPanel({ client, wish, grant, onDone }: { client: ClientCard; wish: string; grant: GrantResult; onDone: () => void }) {
+export function ResultPanel({ wish, grant, onDone }: { wish: string; grant: GrantResult; onDone: () => void }) {
   return (
     <Overlay wide>
       <div className="split genie-split">
@@ -157,7 +167,7 @@ export function ResultPanel({ client, wish, grant, onDone }: { client: ClientCar
         <div className="contract centered">
           <p className="type small muted">"{wish}"</p>
           <p className="genie">{grant.genie.text}</p>
-          <button className="primary" onClick={onDone}>Read the review</button>
+          <button className="primary" onClick={onDone}>{grant.refused ? 'Try again' : 'Done'}</button>
         </div>
       </div>
     </Overlay>
@@ -170,31 +180,31 @@ const SHRUG: Record<number, string> = {
   1: "They'll be back.", 2: "Can't win 'em all", 3: 'Close enough', 4: "I'll take it", 5: 'Another happy customer',
 };
 
-export function ReviewPanel({ client, grant, karmaBefore, karmaAfter, onDone }: {
-  client: ClientCard; grant: GrantResult; karmaBefore: number; karmaAfter: number; onDone: () => void;
+/** The client's review, posted on their callback, with the stars and pay the server worked out from it. */
+export interface Review extends Scorecard { text: string; stars: number; pay: number }
+
+export function ReviewPanel({ client, review, karmaBefore, karmaAfter, onDone }: {
+  client: CallCard; review: Review; karmaBefore: number; karmaAfter: number; onDone: () => void;
 }) {
-  const b = grant.bill;
+  const first = client.name.split(' ')[0];
   return (
     <Overlay>
       <div className="review">
-        <div className="stars" aria-label={`${grant.stars} out of 5 stars`}>{'★'.repeat(grant.stars)}<span>{'★'.repeat(5 - grant.stars)}</span></div>
-        <p className="review-text">{grant.review.text}</p>
+        <div className="stars" aria-label={`${review.stars} out of 5 stars`}>{'★'.repeat(review.stars)}<span>{'★'.repeat(5 - review.stars)}</span></div>
+        <p className="review-text">{review.text}</p>
         <p className="review-by">{client.name}</p>
-        {grant.scorecard && (
-          <ul className="score type small">
-            <li>Got what {client.name.split(' ')[0]} was after: {grant.scorecard.goal_met}</li>
-            <li>How {client.name.split(' ')[0]} feels about the rest: {grant.scorecard.feeling}</li>
-            <li>{grant.scorecard.note}</li>
-          </ul>
-        )}
+        <ul className="score type small">
+          <li>Got what {first} was after: {review.goal_met}</li>
+          <li>How {first} feels about the rest: {review.feeling}</li>
+        </ul>
         <table className="ledger type small">
           <tbody>
-            <tr><td>Paid ({grant.stars}★)</td><td>+{b.pay}</td></tr>
-            {karmaBefore + b.pay > karmaAfter && <tr><td>Replaces your last try</td><td>−{karmaBefore + b.pay - karmaAfter}</td></tr>}
+            <tr><td>Paid ({review.stars}★)</td><td>+{review.pay}</td></tr>
+            {karmaBefore + review.pay > karmaAfter && <tr><td>Replaces your last try</td><td>−{karmaBefore + review.pay - karmaAfter}</td></tr>}
             <tr className="total"><td>Karma</td><td>{karmaBefore} → {karmaAfter}</td></tr>
           </tbody>
         </table>
-        <button className="primary" onClick={onDone}>{SHRUG[grant.stars]}</button>
+        <button className="primary" onClick={onDone}>{SHRUG[review.stars]}</button>
       </div>
     </Overlay>
   );

@@ -1,5 +1,5 @@
 // Typed calls to the Python server. Shapes come from types.gen.ts, generated from schemas.py.
-import type { AskRequest, AskResponse, CallCard, ClientCard, GameConfig, GrantRequest, GrantResult, KeepAlive } from './types.gen';
+import type { CallCard, GameConfig, GenieStart, GrantRequest, GrantResult, KeepAlive, Scorecard, ScoreResult, SignedUrl } from './types.gen';
 
 // The hosted game needs the access code from its link (?code=...). It's remembered for later visits.
 const CODE_KEY = 'wish-broker-code';
@@ -22,9 +22,11 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
 
 export const api = {
   config: () => call<GameConfig>('GET', '/config'),
-  clients: () => call<ClientCard[]>('GET', '/clients'),
+  clients: () => call<CallCard[]>('GET', '/clients'),
+  signedUrl: (agentId: string) => call<SignedUrl>('GET', `/agent/${agentId}/signed-url`),
   generate: () => call<CallCard>('POST', '/clients/generate'),     // a brand-new client with a live call agent; takes ~12s
   keepAlive: (req: KeepAlive) => call<{ ok: boolean }>('POST', '/clients/keep-alive', req),
-  ask: (req: AskRequest) => call<AskResponse>('POST', '/ask', req),
-  grant: (req: GrantRequest) => call<GrantResult>('POST', '/grant', req),
+  genie: (req: GrantRequest) => call<GenieStart>('POST', '/genie', req),     // the live genie's session for this wish
+  grant: (req: GrantRequest) => call<GrantResult>('POST', '/grant', req),     // fake mode: the whole grant in one call
+  score: (card: Scorecard) => call<ScoreResult>('POST', '/score', card),     // stars and pay for the client's review
 };

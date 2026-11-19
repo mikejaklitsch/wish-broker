@@ -4,9 +4,9 @@ import logging
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 
-from . import agents, clients, config, grant
+from . import agents, clients, config, economy, grant, scoring
 from .lines import genie_key, line
-from .schemas import AskRequest, AskResponse, CallCard, ClientCard, GameConfig, GrantRequest, GrantResult, KeepAlive, SignedUrl
+from .schemas import CallCard, GameConfig, GenieStart, GrantRequest, GrantResult, KeepAlive, Scorecard, ScoreResult, SignedUrl
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
 
@@ -21,27 +21,21 @@ app = FastAPI(title="Wish Broker")
 api = APIRouter(prefix="/api", dependencies=[Depends(_check_code)])
 
 
-def _client(client_id: str):
-    try:
-        return clients.get(client_id)
-    except KeyError as e:
-        raise HTTPException(404, str(e))
-
-
 @api.get("/config", response_model=GameConfig)
 def get_config():
     return GameConfig(win_karma=config.WIN_KARMA, start_karma=config.START_KARMA,
-                      questions_per_call=config.QUESTIONS_PER_CALL, wish_seconds=config.WISH_SECONDS, timeout_penalty=config.TIMEOUT_PENALTY,
+                      wish_seconds=config.WISH_SECONDS, call_seconds=config.CALL_SECONDS, timeout_penalty=config.TIMEOUT_PENALTY,
                       genie_refused=line(config.REFUSAL_LINE, genie_key("refused")),
                       genie_rubs=[line(t, genie_key(f"rub_{i}")) for i, t in enumerate(config.RUB_LINES, 1)],
                       llm_fake=config.LLM_FAKE, voice_fake=config.VOICE_FAKE,
                       keep_alive_minutes=config.KEEP_ALIVE_MINUTES)
 
 
-@api.get("/clients", response_model=list[ClientCard])
+@api.get("/clients", response_model=list[CallCard])
 def list_clients():
+    """The hand-made clients, each with their call agent (scripts/sync_agents.py)."""
     synced = agents.saved_ids()["clients"]
-    return [clients.card(c).model_copy(update={"agent_id": synced.get(c.id)}) for c in clients.all_clients().values()]
+    return [agents.card(agents.spec_from_file(c), synced[c.id]) for c in clients.all_clients().values() if c.id in synced]
 
 
 @api.post("/clients/generate", response_model=CallCard)
@@ -68,20 +62,34 @@ def agent_signed_url(agent_id: str):
     return SignedUrl(signed_url=agents.signed_url(agent_id))
 
 
-@api.post("/ask", response_model=AskResponse)
-def ask(req: AskRequest):
-    c = _client(req.client_id)
-    try:
-        return clients.ask(c, req.question_id)
-    except KeyError as e:
-        raise HTTPException(404, str(e))
+@api.post("/genie", response_model=GenieStart)
+def start_genie(req: GrantRequest):
+    """The live genie for this wish; client_id is the client's agent id."""
+    if config.VOICE_FAKE:
+        raise HTTPException(503, "The live genie needs ELEVENLABS_API_KEY")
+    return grant.start(req)
 
 
 @api.post("/grant", response_model=GrantResult)
 def do_grant(req: GrantRequest):
-    _client(req.client_id)
-    # a blank wish (time ran out with nothing written) is refused in grant.run
-    return grant.run(req)
+    """client_id is the client's agent id, or a hand-made client's id."""
+    return grant.run(req, _spec(req.client_id))
+
+
+@api.post("/score", response_model=ScoreResult)
+def score(card: Scorecard):
+    """Stars and pay for the client's review, from their callback."""
+    s = scoring.stars(card)
+    return ScoreResult(stars=s, bill=economy.bill(s))
+
+
+def _spec(client_id: str):
+    for cid, agent_id in agents.saved_ids()["clients"].items():
+        if client_id in (cid, agent_id) and cid in clients.all_clients():
+            return agents.spec_from_file(clients.get(cid))
+    if config.VOICE_FAKE or not client_id.startswith("agent_"):
+        raise HTTPException(404, f"Unknown client {client_id!r}")
+    return agents.load_spec(client_id)
 
 
 app.include_router(api)

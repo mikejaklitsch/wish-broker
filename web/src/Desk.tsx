@@ -18,11 +18,12 @@ const SPOTS: Record<Spot, [number, number, number, number]> = {
 interface Props {
   labels: Partial<Record<Spot, string>>;      // hover text; a spot without a label is not clickable
   attention?: Spot | null;                     // glows to say "click me"
+  waiting?: Spot | null;                       // shows its label as a hint, and can't be clicked yet
   onSpot: (s: Spot) => void;
   onLighting: (l: Lighting) => void;
 }
 
-export default function Desk({ labels, attention, onSpot, onLighting }: Props) {
+export default function Desk({ labels, attention, waiting, onSpot, onLighting }: Props) {
   const bulbOff = useRef<HTMLImageElement>(null);
   const lavaOff = useRef<HTMLImageElement>(null);
   const bothOn = useRef<HTMLImageElement>(null);
@@ -45,7 +46,7 @@ export default function Desk({ labels, attention, onSpot, onLighting }: Props) {
         const [l, t, r, b] = SPOTS[s];
         const label = labels[s];
         return (
-          <button key={s} className={`spot${attention === s ? ' attention' : ''}`} disabled={!label}
+          <button key={s} className={`spot${attention === s ? ' attention' : ''}${waiting === s ? ' waiting' : ''}`} disabled={!label || waiting === s}
             style={{ left: `${(l / W) * 100}%`, top: `${(t / H) * 100}%`, width: `${((r - l) / W) * 100}%`, height: `${((b - t) / H) * 100}%` }}
             onClick={() => onSpot(s)} aria-label={label ?? s}>
             {label && <span className="spot-label">{label}</span>}

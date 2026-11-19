@@ -14,7 +14,7 @@ def test_bill_and_floor():
 
 
 def _card(goal, feeling):
-    return Scorecard(goal_met=goal, feeling=feeling, note="")
+    return Scorecard(goal_met=goal, feeling=feeling)
 
 
 def test_stars_from_reaction_table():
@@ -23,4 +23,3 @@ def test_stars_from_reaction_table():
     assert scoring.stars(_card("partly", "mixed")) == 3
     assert scoring.stars(_card("no", "happy")) == 2
     assert scoring.stars(_card("no", "upset")) == 1
-    assert scoring.stars(None) == 1

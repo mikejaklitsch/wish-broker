@@ -16,10 +16,11 @@ import httpx
 import yaml
 
 from . import clients, config, prompts, voice
-from .schemas import CallCard, ClientFile, ClientSpec, Fact, NoteSlot
+from .schemas import CallCard, ClientFile, ClientSpec, Fact
 
 log = logging.getLogger("wish_broker.agents")
 API = "https://api.elevenlabs.io/v1/convai"
+SPEC_KEY = "wb_spec"
 AGE_BANDS = {"young": (20, 34), "middle-aged": (35, 60), "old": (62, 82)}     # from the voice pool's descriptions
 
 
@@ -65,9 +66,9 @@ def writer_config() -> dict:
         "profession": _string("Their job"),
         "persona": _string("How they talk, two or three sentences"),
         "situation": _string("Background paragraph the voice actor improvises from"),
-        "opening_line": _string("First thing they say when the broker picks up"),
+        "first_message": _string("Their opening line when the broker picks up, 2 to 4 spoken sentences"),
         "goal_label": _string("Notepad heading for the goal, 1 to 4 words, a question"),
-        "goal": _string("What they're really after, with when and where"),
+        "goal": _string("What they consciously want and call in asking for, framed as \"Wants ...\", with when"),
         "cares": {"type": "array", "description": "2 or 3 things a careless wish could trample", "items": note},
         "details": {"type": "array", "description": "2 or 3 true facts that don't matter", "items": note},
     }, "The new client")
@@ -86,39 +87,183 @@ def writer_config() -> dict:
     }
 
 
+def test_broker_config() -> dict:
+    """The broker in automated test calls (scripts/test_call.py). Its play style comes in as {{style}}."""
+    return {
+        "name": "Wish Broker: test broker",
+        "tags": ["wish-broker"],
+        "conversation_config": {
+            "agent": {"first_message": "", "language": "en",
+                      "prompt": {"prompt": (config.PROMPTS_DIR / "test_broker.md").read_text(encoding="utf-8"),
+                                 "llm": config.WRITER_LLM,
+                                 # The broker ends test calls; the client can't hang up.
+                                 "tools": [], "built_in_tools": {"end_call": {"type": "system", "name": "end_call",
+                                                                             "params": {"system_tool_type": "end_call"}}}},
+                      "dynamic_variables": {"dynamic_variable_placeholders": {"style": "Be a good broker."}}},
+            "conversation": {"text_only": True},
+        },
+        "platform_settings": {"auth": {"enable_auth": True},
+                              "overrides": {"conversation_config_override": {"conversation": {"text_only": True}}}},
+    }
+
+
 def client_config(spec: ClientSpec, name: str, tags: list[str]) -> dict:
     goal = next(f for f in spec.facts if f.kind == "goal")
     cares = [f for f in spec.facts if f.kind == "care"]
     details = [f for f in spec.facts if f.kind == "detail"]
-    prompt = prompts.render(
-        "client_agent", name=spec.name, age=spec.age, profession=spec.profession, persona=spec.persona,
-        situation=spec.situation, goal=f"[{goal.id}] {goal.value}",
-        cares="\n".join(f"- [{f.id}] {f.value}" for f in cares),
-        details="\n".join(f"- {f.value}" for f in details) or "- (nothing else)")
-    note = {"type": "client", "name": "note", "expects_response": False,
-            "description": "Fill in a line on the broker's notepad, right after you've told them your goal or something you care about",
-            "parameters": _object({"fact_id": _string("Which line", enum=[goal.id] + [f.id for f in cares]),
-                                   "text": _string("The note in plain words, 3 to 15 words")})}
-    end_call = {"type": "system", "name": "end_call", "description": "Hang up", "params": {"system_tool_type": "end_call"}}
+    who = dict(name=spec.name, age=spec.age, profession=spec.profession, persona=spec.persona, situation=spec.situation,
+               details="\n".join(f"- {f.value}" for f in details) or "- (nothing else)")
+    prompt = prompts.render("client_agent", **who, goal=goal.value,
+                            cares="\n".join(f"- {f.value}" for f in cares))
+    # The callback, after the wish is granted: the browser starts the call at this node with the wish and the outcome.
+    callback = prompts.render("client_callback", **who, goal=goal.value, cares="\n".join(f"- {f.value}" for f in cares))
+    # The genie, granting this client's wish: the browser starts a session at this node with the wish (grant.start).
+    genie = prompts.render("genie", name=spec.name, age=spec.age, profession=spec.profession,
+                           facts=clients.facts_text(spec, kinds=("goal", "care")),
+                           write=prompts.render("genie_agent", ideas=config.GENIE_IDEAS))
+    tools = saved_ids()["tools"]
     return {
         "name": name,
         "tags": tags,
         "conversation_config": {
-            "agent": {"first_message": spec.opening_line, "language": "en", "prompt": {
-                "prompt": prompt, "llm": config.CLIENT_LLM, "tools": [note, end_call]}},
-            "tts": {"model_id": config.AGENT_TTS_MODEL, "voice_id": spec.voice_id},
-            "conversation": {"max_duration_seconds": config.CALL_MAX_SECONDS},
+            # The client's opening line, written with the client; ElevenLabs speaks it as the call connects. Sessions that
+            # start at the callback or genie node blank it (the browser's overrides.agent.firstMessage).
+            "agent": {"first_message": spec.first_message, "language": "en", "prompt": {
+                "prompt": prompt, "llm": config.CLIENT_LLM, "tools": [],
+                "tool_ids": [tools["note"]],
+                # None removes skip_turn on PATCH; an empty dict leaves it. end_call is only for when the call clock runs out.
+                "built_in_tools": {"skip_turn": None, "end_call": TIME_UP_END_CALL},
+                # One tool per step: in parallel, Sonnet files a note and skips its turn together, saying nothing.
+                "enable_parallel_tool_calls": False,
+                # No fallback model: when Sonnet is slow to start, ElevenLabs would otherwise hand the line to another model.
+                # With no fallback, a slow start counts as a failed attempt after cascade_timeout_seconds (default 4), and three
+                # of those end the call ("All LLMs have failed"). Give Sonnet the longest start the API allows.
+                "backup_llm_config": {"preference": "disabled"}, "cascade_timeout_seconds": 15},
+                # The client's data, kept on the agent so the genie can read it back (load_spec). Not used by the prompt.
+                "dynamic_variables": {"dynamic_variable_placeholders": {SPEC_KEY: spec.model_dump_json(), "wish": "", "outcome": "", "call": "(no record)",
+                                                                         **dict.fromkeys(GENIE_VARIABLES, "")}}},
+            # Numbers are turned into words after the reply is written, so no normalisation rules go into the prompt
+            # and the on-screen transcript keeps its digits.
+            "tts": {"model_id": config.AGENT_TTS_MODEL, "voice_id": spec.voice_id, "text_normalisation_type": "elevenlabs"},
+            # vad_score: the browser needs to know whether the broker is mid-sentence when the call clock runs out.
+            "conversation": {"max_duration_seconds": config.CALL_MAX_SECONDS,
+                             "client_events": ["audio", "interruption", "agent_response", "user_transcript",
+                                               "agent_response_correction", "agent_tool_response", "vad_score"]},
         },
-        "platform_settings": {"auth": {"enable_auth": True}},
+        # The client opens the call with their first_message, then waits for the broker. "callback" and "genie" are
+        # started directly by the browser, with no first message, and generate immediately.
+        "workflow": {
+            "nodes": {"start_node": {"type": "start", "edge_order": ["pick_up"], "position": {"x": 0, "y": 0}},
+                      "client": {"type": "override_agent", "label": "Client", "entry_behavior": "wait_for_user",
+                                 "allow_interruptions_on_entry": True, "position": {"x": 0, "y": 150}},
+                      CALLBACK_NODE: {"type": "override_agent", "label": "Callback", "entry_behavior": "generate_immediately",
+                                      "allow_interruptions_on_entry": False, "position": {"x": 300, "y": 150},
+                                      "conversation_config": {"agent": {"prompt": {
+                                          "prompt": callback, "tool_ids": [tools["review"]],
+                                          "built_in_tools": {"end_call": END_CALL}}}}},
+                      # The genie has his own voice. His tool call first, then the outcome out loud, then he ends the session
+                      # himself (end_call), as the client does on the callback.
+                      GENIE_NODE: {"type": "override_agent", "label": "Genie", "entry_behavior": "generate_immediately",
+                                   "allow_interruptions_on_entry": False, "position": {"x": 600, "y": 150},
+                                   "conversation_config": {
+                                       # Low reasoning: at the default he takes twice as long to file the grant, and with
+                                       # none he announces the tool call out loud ("I'll record this first").
+                                       "agent": {"prompt": {"prompt": genie, "tool_ids": [tools.get("grant", "")],
+                                                            "reasoning_effort": "low",
+                                                            "built_in_tools": {"end_call": GENIE_END_CALL}}},
+                                       "tts": {"model_id": config.TTS_MODEL_EXPRESSIVE, "voice_id": config.GENIE_VOICE_ID}}}},
+            "edges": {"pick_up": {"source": "start_node", "target": "client", "forward_condition": {"type": "unconditional"}}},
+        },
+        # text_only may be switched on per session, for the automated test calls (scripts/test_call.py)
+        "platform_settings": {"auth": {"enable_auth": True},
+                              "overrides": {"conversation_config_override": {"conversation": {"text_only": True},
+                                                                             "agent": {"first_message": True}},
+                                            "enable_starting_workflow_node_id_from_client": True}},
     }
 
 
+# Workspace tools, shared by every client agent and kept in agents.json under "tools". Being workspace tools (not inline)
+# also lets ElevenLabs' agent tests mock them.
+TOOLS = {
+    # Note first, then speak. Every tool call makes the model generate again once the result is back, and ElevenLabs
+    # has no setting to stop that. Called before the words, that second generation is the spoken reply; called after
+    # them, it has nothing left to say and comes out as a second line or a repeat of the note.
+    # The browser holds the note until the line has been spoken (App.tsx).
+    "note": {"type": "client", "name": "note", "expects_response": False, "execution_mode": "immediate",
+             "pre_tool_speech": "off", "interruption_mode": "disable_during_tool",
+             "description": "Jots a line on the broker's notepad: the new thing you are about to tell them. "
+                            "Call it before you speak, never after.",
+             "parameters": _object({"text": _string("The note in plain words, 3 to 12 words")})},
+    # The callback's verdict, called before the client speaks; the browser turns it into stars and pay (/api/score).
+    "review": {"type": "client", "name": "review", "expects_response": True, "execution_mode": "immediate",
+               "pre_tool_speech": "off", "interruption_mode": "disable_during_tool",
+               "description": "Posts a star rating of the broker online, with a few lines for strangers deciding whether to hire them. "
+                              "The broker doesn't hear it. Call it before you speak.",
+               "parameters": _object({
+                   "goal_met": _string("Only whether the thing you asked for happened: yes, partly or no. How you feel about it, "
+                                       "and about everything else, goes in feeling.", ["yes", "partly", "no"]),
+                   "feeling": _string("How you feel about everything else that happened, given what matters to you",
+                                      ["happy", "mixed", "upset"]),
+                   "review": _string("Your written review, 2 or 3 short sentences in your own words for strangers thinking of hiring this broker, "
+                                    "about the broker and their work, with the broker as 'they'")})},
+    # The genie's record of the grant, called before he speaks: the ideas he drafts and the one he was told to grant.
+    # Keep the wording plain. Described as his "working-out" before speaking, Sonnet 5.5 declines to answer at all
+    # (stop_reason refusal, no output), which ElevenLabs reports as "All LLMs have failed".
+    "grant": {"type": "client", "name": "grant", "expects_response": True, "execution_mode": "immediate",
+              "pre_tool_speech": "off", "interruption_mode": "disable_during_tool",
+              "description": "Records how this wish is granted. Call it before you speak.",
+              "parameters": _object({
+                  "is_wish": {"type": "boolean", "description": "False when the text is inappropriate or contains no wish request"},
+                  "open": {"type": "array", "description": "What the client is after or cares about that the wish doesn't secure, one line each; empty if it secures everything",
+                           "items": _string("One thing, and the words of the wish that leave it open")},
+                  "ideas": {"type": "array", "description": "Different ways to grant this wish, one line each",
+                            "items": _string("One idea")},
+                  "chosen_idea": _string("The idea you were told to grant, copied exactly"),
+                  "twisted_phrase": _string("The exact words of the wish the twist hangs on, or '' if granted as meant"),
+                  "phrases": {"type": "array", "description": "The stock parts of the outcome you're about to speak, 1 to 6 words each",
+                              "items": _string("One phrase, exactly as you'll say it")}})},
+}
+CALLBACK_NODE = "callback"
+GENIE_NODE = "genie"
+GENIE_VARIABLES = ("words", "used", "pick", "tags")     # sent by the browser with the wish; made by grant.start
+# What the grant tool answers, so the genie's next step is to speak.
+GRANT_NOTED = "Noted. The broker hasn't heard anything from you yet: now end_call, with the whole outcome as its message to speak."
+# What the grant tool answers when he won't touch the wish: the browser plays his recorded refusal and closes the session.
+GRANT_REFUSED = "Refused."
+# What the review tool answers, so the client's next step is to speak and not to hang up.
+REVIEW_POSTED = "Review posted online. The broker still hasn't heard from you: now talk to them out loud and give them your verdict."
+# When the call clock runs out the browser mutes the broker and sends this; the client wraps up and hangs up.
+TIME_UP = "(The call is out of time. The broker can't talk anymore.)"
+TIME_UP_END_CALL = {"type": "system", "name": "end_call", "params": {"system_tool_type": "end_call"},
+                    "description": "Hangs up. Only after the message saying the call is out of time, at the end of your last reply."}
+END_CALL = {"type": "system", "name": "end_call", "params": {"system_tool_type": "end_call"},
+            "description": "Hangs up. Only at the end of a reply in which you've given the broker your verdict out loud."}
+GENIE_END_CALL = {"type": "system", "name": "end_call", "params": {"system_tool_type": "end_call"},
+                  "description": "Speaks its message to the broker, then back into the lamp. The message to speak is the whole outcome; "
+                                 "never call it without one."}
+
+
+def sync_tools(ids: dict) -> dict:
+    """Create or update the workspace tools; returns {name: tool_id}."""
+    out = dict(ids.get("tools", {}))
+    for name, cfg in TOOLS.items():
+        if name in out:
+            _http("PATCH", f"/tools/{out[name]}", json={"tool_config": cfg})
+        else:
+            out[name] = _http("POST", "/tools", json={"tool_config": cfg})["id"]
+    return out
+
+
+def load_spec(agent_id: str) -> ClientSpec:
+    """A client's data, read back from their agent."""
+    a = _http("GET", f"/agents/{agent_id}")
+    return ClientSpec.model_validate_json(a["conversation_config"]["agent"]["dynamic_variables"]["dynamic_variable_placeholders"][SPEC_KEY])
+
+
 def spec_from_file(c: ClientFile) -> ClientSpec:
-    """A hand-made client as an agent plays them. Their scripted answers become background to draw on."""
-    said = "\n".join(f"- {q.answer}" for q in c.questions)
+    """A hand-made client as their call agent plays them."""
     return ClientSpec(name=c.name, age=c.age, profession=c.profession, tier=c.tier, persona=c.persona,
-                      situation=f"Things you've said about it, in your own words:\n{said}",
-                      opening_line=c.opening_line, voice_id=c.voice_id, facts=c.facts)
+                      situation=c.situation, first_message=c.first_message, voice_id=c.voice_id, facts=c.facts)
 
 
 def spec_from_writer(p: dict, voice_id: str) -> ClientSpec:
@@ -126,14 +271,14 @@ def spec_from_writer(p: dict, voice_id: str) -> ClientSpec:
     facts += [Fact(id=f"care{i}", kind="care", **n) for i, n in enumerate(p["cares"], 1)]
     facts += [Fact(id=f"detail{i}", kind="detail", **n) for i, n in enumerate(p["details"], 1)]
     return ClientSpec(name=p["name"], age=int(p["age"]), profession=p["profession"], persona=p["persona"],
-                      situation=p["situation"], opening_line=p["opening_line"],
+                      situation=p["situation"], first_message=p["first_message"],
                       voice_id=voice_id, facts=facts)
 
 
 def card(spec: ClientSpec, agent_id: str) -> CallCard:
     return CallCard(agent_id=agent_id, name=spec.name, age=spec.age, profession=spec.profession, tier=spec.tier,
-                    pay_min=min(config.PAY.values()), pay_max=max(config.PAY.values()),
-                    notes=[NoteSlot(id=f.id, label=f.label) for f in spec.facts if f.kind != "detail"])
+                    ask=next(f.value for f in spec.facts if f.kind == "goal"),     # the same thing their opening line asks for
+                    pay_min=min(config.PAY.values()), pay_max=max(config.PAY.values()))
 
 
 # ---------------------------------------------------------------- ElevenLabs calls
@@ -172,7 +317,7 @@ def write_client() -> ClientSpec:
     tools = ClientTools()
     tools.register("create_client", create_client)
     conv = Conversation(voice._elevenlabs(), writer, requires_auth=True, client_tools=tools)
-    existing = [f"{c.name}, {c.profession}: {c.opening_line}" for c in clients.all_clients().values()]
+    existing = [f"{c.name}, {c.profession}: {next(f.value for f in c.facts if f.kind == 'goal')}" for c in clients.all_clients().values()]
     words = ", ".join(random.sample(_words(), 12))
     v = random.choice(list(voice_pool().values()))
     band = next((r for word, r in AGE_BANDS.items() if word in v["about"]), (22, 75))

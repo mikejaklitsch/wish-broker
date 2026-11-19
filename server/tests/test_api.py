@@ -10,55 +10,40 @@ def test_client_files_load_and_validate():
     assert clients.all_clients()            # validate() runs on load and raises on bad content
 
 
-def test_cards_hide_answers_and_facts():
+def test_cards_hide_the_client_secrets():
     body = str(api.get("/api/clients").json())
     for c in clients.all_clients().values():
-        for f in c.facts:
-            assert f.value not in body
-        for q in c.questions:
-            assert q.answer not in body
-        assert c.refused_review not in body
+        for f in c.facts:      # the goal is on the card: it's what the client says in their opening line
+            assert f.kind == "goal" or f.value not in body
+        assert c.situation not in body
 
 
 def test_full_round_in_fake_mode():
     cfg = api.get("/api/config").json()
-    assert cfg["llm_fake"] and cfg["voice_fake"] and cfg["questions_per_call"] > 0
+    assert cfg["llm_fake"] and cfg["voice_fake"]
     card = api.get("/api/clients").json()[0]
-    assert "[" not in card["opening"]["text"]          # audio tags hidden on screen
+    assert card["agent_id"].startswith("agent_")
 
-    for q in card["questions"]:
-        r = api.post("/api/ask", json={"client_id": card["id"], "question_id": q["id"]}).json()
-        assert r["answer"]["text"] and r["answer"]["seconds"] > 0 and len(r["revealed"]) == 1
-
-    g = api.post("/api/grant", json={"client_id": card["id"], "wish": "I wish Vinny would win the lottery tonight"}).json()
-    assert not g["refused"] and 1 <= g["stars"] <= 5
-    assert g["genie"]["text"] and g["review"]["text"]
-    assert g["bill"]["pay"] == config.PAY[g["stars"]]
+    g = api.post("/api/grant", json={"client_id": card["agent_id"], "wish": "I wish Vinny would win the lottery tonight"}).json()
+    assert not g["refused"] and g["genie"]["text"]
+    # The client's review comes from their callback; the server turns it into stars and pay.
+    s = api.post("/api/score", json={"goal_met": "yes", "feeling": "mixed"}).json()
+    assert s["stars"] == 4 and s["bill"]["pay"] == config.PAY[4]
 
 
-def test_non_wish_gets_the_fixed_refusal_and_one_star():
+def test_non_wish_gets_the_fixed_refusal():
     g = api.post("/api/grant", json={"client_id": "vinny", "wish": "I wish Lisa's husband would die"}).json()
-    assert g["refused"] and g["stars"] == 1
+    assert g["refused"] and g["genie"]["text"]
 
 
-def test_unknown_client_or_question_is_404():
+def test_unknown_client_is_404():
     assert api.post("/api/grant", json={"client_id": "nobody", "wish": "x"}).status_code == 404
-    assert api.post("/api/ask", json={"client_id": "vinny", "question_id": "nope"}).status_code == 404
-
-
-def test_unreachable_question_is_rejected():
-    import pytest
-    c = clients.get("vinny").model_copy(deep=True)
-    c.questions[0].requires = [c.questions[1].reveals]
-    c.questions[1].requires = [c.questions[0].reveals]      # a loop: neither can ever be asked
-    with pytest.raises(AssertionError, match="never be unlocked"):
-        clients.validate(c)
 
 
 def test_blank_wish_is_refused_without_asking_the_genie(monkeypatch):
     monkeypatch.setattr(grant, "_genie", lambda *a: (_ for _ in ()).throw(AssertionError("genie called")))
     g = api.post("/api/grant", json={"client_id": "danny", "wish": "   "}).json()
-    assert g["refused"] and g["stars"] == 1
+    assert g["refused"]
 
 
 class _FakeElevenLabs:
@@ -114,4 +99,4 @@ def test_genie_voice_test_mode_speaks_a_short_llm_reply(monkeypatch):
     g = _wish()
     (_, kw), = fake.spoken
     assert kw["text"] == "[sarcastic] How original." and g["genie"]["audio"].startswith("data:audio/mpeg")
-    assert g["genie"]["text"] == "How original." and g["stars"] == 3
+    assert g["genie"]["text"] == "How original."

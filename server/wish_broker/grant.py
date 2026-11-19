@@ -1,15 +1,16 @@
-"""The grant: one genie call (the twist, how the client took it, their review), then stars and bill.
+"""The grant: the genie twists the wish. How the client takes it comes later, on their callback.
 
-With WB_GENIE_VOICE=1 the genie's outcome is also spoken, sent back inside the result as an MP3 data URL.
+In the game the genie is live: the genie node of the client's agent, started by the browser (start). run is the same
+grant as one model call, for fake mode and the test scripts; with WB_GENIE_VOICE=1 its outcome is also spoken.
 """
 import base64
 import logging
 import random
 from functools import lru_cache
 
-from . import clients, config, economy, llm, prompts, scoring, voice
+from . import agents, clients, config, llm, prompts, voice
 from .lines import genie_key, line
-from .schemas import GenieOutput, GenieTestOutput, GrantRequest, GrantResult, Line, Scorecard
+from .schemas import ClientSpec, GenieOutput, GenieStart, GenieTestOutput, GrantRequest, GrantResult, Line
 
 log = logging.getLogger("wish_broker.grant")
 
@@ -19,38 +20,44 @@ def _adjectives() -> list[str]:
     return config.ADJECTIVES.read_text(encoding="utf-8").split()
 
 
-def _genie(c, wish: str, used: list[str]) -> GenieOutput:
-    system = prompts.render("genie", name=c.name, age=c.age, profession=c.profession, persona=c.persona,
-                            facts=clients.facts_text(c, kinds=("goal", "care")),
-                            genie_tags=", ".join(random.sample(config.GENIE_TAGS, config.GENIE_TAGS_OFFERED)))
-    words = ", ".join(random.sample(_adjectives(), config.RANDOM_WORDS_PER_GRANT))
-    pick = random.randint(1, config.GENIE_IDEAS)
+def _dice(used: list[str]) -> dict[str, str]:
+    """What changes from one grant to the next: random words, which idea to grant, voice tags, and phrases not to repeat."""
     used = list(dict.fromkeys(" ".join(p.split())[:80] for p in used if p.strip()))[-config.GENIE_PHRASES_KEPT:]
-    earlier = ("Phrases you've already used on this broker tonight. Don't use any of them again, or anything close:\n"
-               + "\n".join(f"- {p}" for p in used) + "\n\n") if used else ""
-    user = (f"The wish, exactly as written:\n\"{wish}\"\n\nThese words are random and unrelated: {words}\n\n{earlier}"
-            f"Write {config.GENIE_IDEAS} ideas, then grant idea number {pick}.")
+    return {"words": ", ".join(random.sample(_adjectives(), config.RANDOM_WORDS_PER_GRANT)),
+            "pick": str(random.randint(1, config.GENIE_IDEAS)),
+            "tags": ", ".join(random.sample(config.GENIE_TAGS, config.GENIE_TAGS_OFFERED)),
+            "used": ("Phrases you've already used on this broker tonight. Don't use any of them again, or anything close:\n"
+                     + "\n".join(f"- {p}" for p in used)) if used else ""}
+
+
+def start(req: GrantRequest) -> GenieStart:
+    """The live genie: a link to the genie node of the client's agent, and what the browser passes in with the wish.
+    He speaks the outcome himself, so nothing is granted here."""
+    return GenieStart(signed_url=agents.signed_url(req.client_id), variables={"wish": " ".join(req.wish.split()), **_dice(req.used_phrases)})
+
+
+def _genie(c, wish: str, used: list[str]) -> GenieOutput:
+    d = _dice(used)
+    system = prompts.render("genie", name=c.name, age=c.age, profession=c.profession,
+                            facts=clients.facts_text(c, kinds=("goal", "care")),
+                            write=prompts.render("genie_write", genie_tags=d["tags"]))
+    earlier = d["used"] + "\n\n" if d["used"] else ""
+    user = (f"The wish, exactly as written:\n\"{wish}\"\n\nThese words are random and unrelated: {d['words']}\n\n{earlier}"
+            f"Write {config.GENIE_IDEAS} ideas, then grant idea number {d['pick']}.")
     return llm.structured("genie", config.MODEL_GENIE, system, [{"role": "user", "content": user}], GenieOutput,
                           context={"client": c, "wish": wish})
 
 
-def run(req: GrantRequest) -> GrantResult:
-    c = clients.get(req.client_id)
+def run(req: GrantRequest, c: ClientSpec) -> GrantResult:
     wish = " ".join(req.wish.split())
     if wish and config.GENIE_VOICE_TEST:                     # voice check: a 1 to 5 word genie reply, spoken live
         short = llm.structured("genie_test", config.MODEL_GENIE, config.GENIE_TEST_SYSTEM,
                                [{"role": "user", "content": f"The wish: \"{wish}\""}], GenieTestOutput)
-        return GrantResult(refused=False, genie=_spoken(short.line), stars=3, bill=economy.bill(3),
-                           scorecard=Scorecard(goal_met="partly", feeling="mixed", note="Test wish."),
-                           review=line(config.GENIE_TEST_REVIEW, ""))
+        return GrantResult(refused=False, genie=_spoken(short.line))
     g = _genie(c, wish, req.used_phrases) if wish else None       # time ran out with nothing written: no genie call
     if g is None or not g.is_wish:                           # not a wish, or not one the genie will touch: fixed refusal
-        return GrantResult(refused=True, genie=line(config.REFUSAL_LINE, genie_key("refused")), scorecard=None,
-                           stars=1, bill=economy.bill(1), review=clients.refused_review(c))
-    card = Scorecard(goal_met=g.goal_met, feeling=g.feeling, note=g.note)
-    s = scoring.stars(card)
-    return GrantResult(refused=False, genie=_spoken(g.outcome), scorecard=card,
-                       stars=s, bill=economy.bill(s), review=line(g.review, ""), phrases=g.phrases)
+        return GrantResult(refused=True, genie=line(config.REFUSAL_LINE, genie_key("refused")))
+    return GrantResult(refused=False, genie=_spoken(g.outcome), phrases=g.phrases)
 
 
 def _spoken(text: str) -> Line:

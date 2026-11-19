@@ -21,14 +21,20 @@ def main():
         return
     apply = "--apply" in sys.argv
     ids = agents.saved_ids()
-    wanted = [("writer", agents.writer_config(), ids.get("writer"))]
+    print(f"tools: {', '.join(agents.TOOLS)}")
+    if apply:
+        ids["tools"] = agents.sync_tools(ids)
+        config.AGENTS_FILE.write_text(json.dumps(ids, indent=1) + "\n", encoding="utf-8")
+    wanted = [("writer", agents.writer_config(), ids.get("writer")),
+              ("test_broker", agents.test_broker_config(), ids.get("test_broker"))]
     for c in clients.all_clients().values():
         body = agents.client_config(agents.spec_from_file(c), f"Wish Broker client: {c.name}", ["wish-broker"])
         wanted.append((c.id, body, ids["clients"].get(c.id)))
 
     for key, body, agent_id in wanted:
         prompt = body["conversation_config"]["agent"]["prompt"]
-        tools = ", ".join(t["name"] for t in prompt["tools"])
+        tools = ", ".join([t["name"] for t in prompt.get("tools", [])] + list(prompt.get("built_in_tools", {}))
+                          + [f"{len(prompt.get('tool_ids', []))} workspace"]) 
         print(f"{'update' if agent_id else 'create'} {key}: {body['name']} | {prompt['llm']} | "
               f"prompt {len(prompt['prompt'])} chars | tools: {tools}")
         if not apply:
@@ -37,8 +43,8 @@ def main():
             agents.update(agent_id, body)
         else:
             agent_id = agents.create(body)
-        if key == "writer":
-            ids["writer"] = agent_id
+        if key in ("writer", "test_broker"):
+            ids[key] = agent_id
         else:
             ids["clients"][key] = agent_id
         print(f"  -> {agent_id}")
